@@ -360,5 +360,37 @@ namespace Jellyfin.Plugin.MetaShark.Test
 
         }
 
+        [TestMethod]
+        public void TestVirtualSeasonOrphanRegression()
+        {
+            // 扁平虚拟季：正片 S01E01 不应判 Extra/Special，避免孤儿或误入 S00
+            var fileName = "Day.And.Night.S01E01.2017.Netflix.WEB-DL.1080p.x264.DDP-HDCTV";
+            var parseResult = NameParser.ParseEpisode(fileName);
+            Assert.AreEqual(parseResult.ParentIndexNumber, 1);
+            Assert.AreEqual(parseResult.IndexNumber, 1);
+            Assert.IsFalse(parseResult.IsExtra);
+            Assert.IsFalse(parseResult.IsSpecial);
+
+            // 扁平 E01 无季号：集号可解析，季号留空由 EpisodeProvider 虚拟季兜底为 1
+            fileName = "Slam.Dunk.E01.2013.720p.HDTV.x264.AAC-NGB";
+            parseResult = NameParser.ParseEpisode(fileName);
+            Assert.AreEqual(parseResult.IndexNumber, 1);
+            Assert.IsFalse(parseResult.IsExtra);
+            Assert.IsFalse(parseResult.IsSpecial);
+
+            // SXXEPXX 特殊命名：季集均应解析正确，不触发孤儿
+            fileName = "神探狄仁杰 Detective.Dee.S01EP01.2006.2160p.WEB-DL.x264.AAC-HQC";
+            parseResult = NameParser.ParseEpisode(fileName);
+            Assert.AreEqual(parseResult.ParentIndexNumber, 1);
+            Assert.AreEqual(parseResult.IndexNumber, 1);
+            Assert.IsFalse(parseResult.IsExtra);
+
+            // 正片 TV 不应因 AnimeType 误判 Extra
+            fileName = "Shigurui.TV.2007.EP01.BDRip.1920x1080.h264.AC3 5.1ch.2Audio";
+            parseResult = NameParser.ParseEpisode(fileName);
+            Assert.AreEqual(parseResult.IndexNumber, 1);
+            Assert.IsFalse(parseResult.IsExtra);
+        }
+
     }
 }

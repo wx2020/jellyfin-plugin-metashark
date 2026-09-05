@@ -186,7 +186,11 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             // https://github.com/jellyfin/jellyfin/commit/72911501d34a1da4333f731e1f24169c21248f54 
             var isVirtualSeason = this.IsVirtualSeason(info);
             var seasonFolderPath = this.GetOriginalSeasonPath(info);
-            if (info.ParentIndexNumber is null or 1 && isVirtualSeason)
+            // 虚拟季默认 S01，但特典/Extra 除外，避免正片 SP 被误收进 S01 或正片被丢进 S00。
+            // 线上复现：扁平 /白夜追凶/E01.strm 初扫 ParentIndex=null，若留 null 会先建“未知季(null)”再重建，
+            // 元数据刷新不迁移 Episode.SeasonId，造成孤儿集。
+            var isSpecialOrExtra = parseResult.IsSpecial || parseResult.IsExtra || NameParser.IsSpecialDirectory(info.Path) || NameParser.IsExtraDirectory(info.Path);
+            if (info.ParentIndexNumber is null or 1 && isVirtualSeason && !isSpecialOrExtra)
             {
                 if (seasonFolderPath != null)
                 {
