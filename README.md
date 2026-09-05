@@ -14,11 +14,13 @@ jellyfin电影元数据插件，影片信息只要从豆瓣获取，并由TheMov
 
 ## 安装插件
 
-添加插件存储库：
+添加插件存储库（本 fork 含虚拟季孤儿集修复，版本 `v2.3.6-fix1` 起可用）：
 
-国内加速：https://ghfast.top/https://github.com/cxfksword/jellyfin-plugin-metashark/releases/download/manifest/manifest_cn.json
+国内加速：https://ghfast.top/https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/manifest/manifest_cn.json
 
-国外访问：https://github.com/cxfksword/jellyfin-plugin-metashark/releases/download/manifest/manifest.json
+国外访问：https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/manifest/manifest.json
+
+> 上游原地址：https://github.com/cxfksword/jellyfin-plugin-metashark/releases/download/manifest/manifest.json（无本 fork 修复内容）
 
 > 如果都无法访问，可以直接从 [Release](https://github.com/cxfksword/jellyfin-plugin-metashark/releases) 页面下载，并解压到 jellyfin 插件目录中使用
 
