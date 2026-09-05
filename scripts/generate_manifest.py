@@ -16,9 +16,9 @@ def generate_manifest():
         "name": "MetaShark",
         "description": "jellyfin电影元数据插件，影片信息只要从豆瓣获取，并由TMDB补充缺失的剧集数据。",
         "overview": "jellyfin电影元数据插件",
-        "owner": "cxfksword",
+        "owner": "wx2020",
         "category": "Metadata",
-        "imageUrl": "https://github.com/cxfksword/jellyfin-plugin-metashark/raw/main/doc/logo.png",
+        "imageUrl": "https://github.com/wx2020/jellyfin-plugin-metashark/raw/main/doc/logo.png",
         "versions": []
     }]
 
@@ -27,7 +27,7 @@ def generate_version(filepath, version, changelog):
         'version': f"{version}.0",
         'changelog': changelog,
         'targetAbi': '10.11.0.0',
-        'sourceUrl': f'https://github.com/cxfksword/jellyfin-plugin-metashark/releases/download/v{version}/metashark_{version}.0.zip',
+        'sourceUrl': f'https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/v{version}/metashark_{version}.0.zip',
         'checksum': md5sum(filepath),
         'timestamp': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     }
@@ -47,7 +47,7 @@ def main():
 
     # 解析旧 manifest
     try:
-        with urlopen('https://github.com/cxfksword/jellyfin-plugin-metashark/releases/download/manifest/manifest.json') as f:
+        with urlopen('https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/manifest/manifest.json') as f:
             manifest = json.load(f)
     except HTTPError as err:
         if err.code == 404:
