@@ -78,6 +78,11 @@ namespace Jellyfin.Plugin.MetaShark.Providers
 
         protected async Task<TMDbLib.Objects.Search.TvSeasonEpisode?> GetEpisodeAsync(int seriesTmdbId, int? seasonNumber, int? episodeNumber, string displayOrder, string? language, string? imageLanguages, CancellationToken cancellationToken)
         {
+            if (seasonNumber is null || episodeNumber is null or 0)
+            {
+                return null;
+            }
+
             // 根据剧集组获取对应的剧集信息
             if (!string.IsNullOrWhiteSpace(displayOrder))
             {
@@ -97,11 +102,11 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                         {
                             return null;
                         }
-                        if (ep.EpisodeNumber > result.Episodes.Count)
-                        {
-                            return null;
-                        }
-                        return result.Episodes[ep.EpisodeNumber - 1];
+
+                        // 按集号匹配而非按索引，避免 TMDB 缺集/多集/排序差异导致错位或孤儿。
+                        // 复现：299154 S4E7/E22 按索引越界返回 null。
+                        var matched = result.Episodes.Find(e => e.EpisodeNumber == ep.EpisodeNumber);
+                        return matched ?? (ep.EpisodeNumber > 0 && ep.EpisodeNumber <= result.Episodes.Count ? result.Episodes[ep.EpisodeNumber - 1] : null);
                     }
                 }
             }
@@ -114,11 +119,20 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             {
                 return null;
             }
-            if (episodeNumber.Value > seasonResult.Episodes.Count)
+
+            // 按集号匹配而非按索引，避免 TMDB 与本地集数不一致时整集丢失元数据。
+            var episode = seasonResult.Episodes.Find(e => e.EpisodeNumber == episodeNumber.Value);
+            if (episode != null)
             {
-                return null;
+                return episode;
             }
-            return seasonResult.Episodes[episodeNumber.Value - 1];
+
+            if (episodeNumber.Value > 0 && episodeNumber.Value <= seasonResult.Episodes.Count)
+            {
+                return seasonResult.Episodes[episodeNumber.Value - 1];
+            }
+
+            return null;
         }
 
         /// <inheritdoc />

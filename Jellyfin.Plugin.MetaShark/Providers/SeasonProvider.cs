@@ -62,6 +62,16 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                     seasonNumber = this.GuessSeasonNumberByDirectoryName(info.Path);
                 }
 
+                // 虚拟季兜底：扁平布局（/白夜追凶/E01.strm）info.Path 为空且 IndexNumber 为 null 时，
+                // 若直接返回空会导致 Jellyfin 先建“未知季(null)”再删除重建“第1季”，而元数据刷新不迁移
+                // 已有 Episode.ParentId/SeasonId，造成 1068 孤儿集。S00 特典（IndexNumber=0）不受影响。
+                // 此处默认按 S01 承接，与 EpisodeProvider 虚拟季修正保持一致。
+                if (seasonNumber is null && string.IsNullOrEmpty(info.Path))
+                {
+                    seasonNumber = 1;
+                    this.Log($"Season [{info.Name}] virtual path empty, default seasonNumber to 1 to avoid null-season churn.");
+                }
+
                 // 搜索豆瓣季 id
                 if (string.IsNullOrEmpty(seasonSid))
                 {

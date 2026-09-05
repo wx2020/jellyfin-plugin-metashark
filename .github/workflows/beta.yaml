@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Get tags (For CHANGELOG)
-        run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+        run: git fetch --depth=1 origin +refs/tags/*:refs/tags/* || echo "no tags, skip"
       - name: Setup dotnet
         uses: actions/setup-dotnet@v3
         id: dotnet
@@ -40,7 +40,7 @@ jobs:
           mkdir -p artifacts
           cp ./Jellyfin.Plugin.MetaShark/bin/Release/net9.0/Jellyfin.Plugin.MetaShark.dll ./artifacts/
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{steps.vars.outputs.APP_NAME}}
           path: artifacts

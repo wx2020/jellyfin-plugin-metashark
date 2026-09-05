@@ -48,7 +48,21 @@ namespace Jellyfin.Plugin.MetaShark.Model
         {
             get
             {
-                return !string.IsNullOrEmpty(AnimeType) && AnimeType.ToUpper() != "SP" && AnimeType.ToUpper() != "OVA" && AnimeType.ToUpper() != "TV";
+                if (string.IsNullOrEmpty(AnimeType))
+                {
+                    return false;
+                }
+
+                var type = AnimeType.ToUpperInvariant();
+                if (type == "SP" || type == "OVA" || type == "TV" || type == "MOVIE")
+                {
+                    return false;
+                }
+
+                // 仅明确的特典/附属类型才算 Extra，避免正片因 Anitomy 误解析 AnimeType 而被丢进 S00/Extra。
+                // 线上孤儿集复现：正片 S01E01/E01 不应命中此处。
+                string[] extraMarkers = { "CM", "MENU", "MENUS", "NCED", "NCOP", "NCOD", "NCOPED", "PV", "DRAMA", "VOICE", "MESSAGE", "BONUS", "EXTRA" };
+                return extraMarkers.Any(m => type.Contains(m, StringComparison.Ordinal));
             }
         }
 
