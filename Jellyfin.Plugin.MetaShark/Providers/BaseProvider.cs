@@ -153,13 +153,8 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                 }
 
                 this.Log("GetImageResponse url: {0}", url);
-                // 豆瓣图，带referer下载
-                using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, url))
-                {
-                    requestMessage.Headers.Add("User-Agent", DoubanApi.HTTP_USER_AGENT);
-                    requestMessage.Headers.Add("Referer", DoubanApi.HTTP_REFERER);
-                    return await this._httpClientFactory.CreateClient().SendAsync(requestMessage, cancellationToken).ConfigureAwait(false);
-                }
+                // 豆瓣图，统一走限速下载
+                return await this._doubanApi.GetImageAsync(url, cancellationToken).ConfigureAwait(false);
             }
             else
             {

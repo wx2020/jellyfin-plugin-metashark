@@ -68,6 +68,12 @@ namespace Jellyfin.Plugin.MetaShark.Api
         private TimeLimiter _guestTimeConstraint = TimeLimiter.Compose(new CountByIntervalAwaitableConstraint(10, TimeSpan.FromMinutes(1)), new CountByIntervalAwaitableConstraint(1, TimeSpan.FromMilliseconds(5000)));
         // 登录后最多1分钟20次请求，不然会触发机器人检验
         private TimeLimiter _loginedTimeConstraint = TimeLimiter.Compose(new CountByIntervalAwaitableConstraint(20, TimeSpan.FromMinutes(1)), new CountByIntervalAwaitableConstraint(1, TimeSpan.FromMilliseconds(3000)));
+        // 图片下载默认500毫秒请求1次
+        private TimeLimiter _imageTimeConstraint = TimeLimiter.GetFromMaxCountByInterval(1, TimeSpan.FromMilliseconds(500));
+        // 防封禁开启时图片下载1秒请求1次
+        private TimeLimiter _imageSafeTimeConstraint = TimeLimiter.GetFromMaxCountByInterval(1, TimeSpan.FromMilliseconds(1000));
+        // 图片下载专用客户端（图床不返回挑战页，无需走DoubanSecHandler）
+        private readonly HttpClient _imageHttpClient;
 
 
         /// <summary>
@@ -87,6 +93,13 @@ namespace Jellyfin.Plugin.MetaShark.Api
             httpClient.DefaultRequestHeaders.Add("User-Agent", HTTP_USER_AGENT);
             httpClient.DefaultRequestHeaders.Add("Origin", "https://movie.douban.com");
             httpClient.DefaultRequestHeaders.Add("Referer", "https://movie.douban.com/");
+
+            // 初始化图片下载客户端
+            var imageHandler = new HttpClientHandlerEx();
+            this._imageHttpClient = new HttpClient(imageHandler);
+            this._imageHttpClient.Timeout = TimeSpan.FromSeconds(30);
+            this._imageHttpClient.DefaultRequestHeaders.Add("User-Agent", HTTP_USER_AGENT);
+            this._imageHttpClient.DefaultRequestHeaders.Add("Referer", HTTP_REFERER);
 
             this.LoadLoadDoubanCookie();
             if (Plugin.Instance != null)
@@ -931,6 +944,99 @@ namespace Jellyfin.Plugin.MetaShark.Api
             }
         }
 
+        /// <summary>
+        /// 判断是否豆瓣图床图片地址.
+        /// </summary>
+        public static bool IsDoubanImageUrl(string? url)
+        {
+            if (string.IsNullOrEmpty(url))
+            {
+                return false;
+            }
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            return string.Equals(uri.Host, "doubanio.com", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.EndsWith(".doubanio.com", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// 下载豆瓣图床图片（带限速、失败重试与失败短缓存，避免高频请求触发图床风控）.
+        /// </summary>
+        public async Task<HttpResponseMessage> GetImageAsync(string url, CancellationToken cancellationToken)
+        {
+            // 最近失败的地址短期内直接快速失败，避免Jellyfin刷新时反复重试放大请求量
+            if (_memoryCache.TryGetValue(GetImageFailCacheKey(url), out _))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadGateway);
+            }
+
+            var timeConstraint = IsEnableAvoidRiskControl() ? this._imageSafeTimeConstraint : this._imageTimeConstraint;
+            const int maxRetry = 2;
+
+            for (var attempt = 0; ; attempt++)
+            {
+                await timeConstraint;
+
+                HttpResponseMessage response;
+                try
+                {
+                    response = await this._imageHttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (HttpRequestException)
+                {
+                    if (attempt >= maxRetry)
+                    {
+                        _memoryCache.Set(GetImageFailCacheKey(url), true, TimeSpan.FromSeconds(60));
+                        throw;
+                    }
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(500 << attempt), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                // 图床风控（403/429/5xx网关错误）时退避重试
+                if (!IsTransientImageFailure(response.StatusCode) || attempt >= maxRetry)
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        // 404等确定的失败缓存10分钟，网关类错误短缓存60秒
+                        var failDuration = (int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.TooManyRequests
+                            ? TimeSpan.FromSeconds(60)
+                            : TimeSpan.FromMinutes(10);
+                        _memoryCache.Set(GetImageFailCacheKey(url), true, failDuration);
+                    }
+
+                    return response;
+                }
+
+                response.Dispose();
+                await Task.Delay(TimeSpan.FromMilliseconds(500 << attempt), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private static string GetImageFailCacheKey(string url)
+        {
+            return $"douban-image-fail:{url}";
+        }
+
+        private static bool IsTransientImageFailure(HttpStatusCode statusCode)
+        {
+            return statusCode == HttpStatusCode.Forbidden
+                || statusCode == HttpStatusCode.RequestTimeout
+                || statusCode == HttpStatusCode.TooManyRequests
+                || statusCode == HttpStatusCode.BadGateway
+                || statusCode == HttpStatusCode.ServiceUnavailable
+                || statusCode == HttpStatusCode.GatewayTimeout;
+        }
+
         private string GetTitle(string body)
         {
             var title = string.Empty;
@@ -1004,6 +1110,7 @@ namespace Jellyfin.Plugin.MetaShark.Api
             if (disposing)
             {
                 httpClient.Dispose();
+                _imageHttpClient.Dispose();
                 _memoryCache.Dispose();
             }
         }

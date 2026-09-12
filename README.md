@@ -14,7 +14,7 @@ jellyfin电影元数据插件，影片信息只要从豆瓣获取，并由TheMov
 
 ## 安装插件
 
-添加插件存储库（本 fork 含虚拟季孤儿集修复，版本 `v2.3.7` 起可用）：
+添加插件存储库（本 fork 含虚拟季孤儿集修复与豆瓣图床 502 修复，版本 `v2.3.7.1` 起可用）：
 
 国内加速：https://ghfast.top/https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/manifest/manifest_cn.json
 
