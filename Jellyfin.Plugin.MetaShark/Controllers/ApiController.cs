@@ -1,12 +1,10 @@
 using System.Threading;
-using System.Linq;
 using System.Net.Http;
 using System.IO;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using MediaBrowser.Common.Net;
 using Jellyfin.Plugin.MetaShark.Api;
 using Jellyfin.Plugin.MetaShark.Model;
 
@@ -18,15 +16,13 @@ namespace Jellyfin.Plugin.MetaShark.Controllers
     public class ApiController : ControllerBase
     {
         private readonly DoubanApi _doubanApi;
-        private readonly IHttpClientFactory _httpClientFactory;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ApiController"/> class.
         /// </summary>
-        /// <param name="httpClientFactory">The <see cref="IHttpClientFactory"/>.</param>
-        public ApiController(IHttpClientFactory httpClientFactory, DoubanApi doubanApi)
+        /// <param name="doubanApi">The <see cref="DoubanApi"/>.</param>
+        public ApiController(DoubanApi doubanApi)
         {
-            this._httpClientFactory = httpClientFactory;
             this._doubanApi = doubanApi;
         }
 
@@ -38,34 +34,27 @@ namespace Jellyfin.Plugin.MetaShark.Controllers
         [HttpGet]
         public async Task<Stream> ProxyImage(string url)
         {
-
-            if (string.IsNullOrEmpty(url))
+            // 只允许代理豆瓣图床地址，同时防止端点被滥用为开放代理
+            if (string.IsNullOrEmpty(url) || !DoubanApi.IsDoubanImageUrl(url))
             {
                 throw new ResourceNotFoundException();
             }
 
+            // 统一走限速下载，避免高频请求触发豆瓣图床风控
             HttpResponseMessage response;
-            var httpClient = GetHttpClient();
-            using (var requestMessage = new HttpRequestMessage(HttpMethod.Get, url))
+            MemoryStream stream;
+            using (response = await this._doubanApi.GetImageAsync(url, this.HttpContext.RequestAborted).ConfigureAwait(false))
             {
-                requestMessage.Headers.Add("User-Agent", DoubanApi.HTTP_USER_AGENT);
-                requestMessage.Headers.Add("Referer", DoubanApi.HTTP_REFERER);
-
-                response = await httpClient.SendAsync(requestMessage);
+                var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                stream = new MemoryStream(bytes);
             }
-            var stream = await response.Content.ReadAsStreamAsync();
 
             Response.StatusCode = (int)response.StatusCode;
             if (response.Content.Headers.ContentType != null)
             {
                 Response.ContentType = response.Content.Headers.ContentType.ToString();
             }
-            Response.ContentLength = response.Content.Headers.ContentLength;
-
-            foreach (var header in response.Headers)
-            {
-                Response.Headers.Add(header.Key, header.Value.First());
-            }
+            Response.ContentLength = stream.Length;
 
             return stream;
         }
@@ -79,13 +68,6 @@ namespace Jellyfin.Plugin.MetaShark.Controllers
         {
             var loginInfo = await this._doubanApi.GetLoginInfoAsync(CancellationToken.None).ConfigureAwait(false);
             return new ApiResult(loginInfo.IsLogined ? 1 : 0, loginInfo.Name);
-        }
-
-
-        private HttpClient GetHttpClient()
-        {
-            var client = _httpClientFactory.CreateClient(NamedClient.Default);
-            return client;
         }
     }
 }
