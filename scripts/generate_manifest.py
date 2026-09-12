@@ -22,12 +22,19 @@ def generate_manifest():
         "versions": []
     }]
 
+def normalize_version(tag):
+    # 三段 tag（X.Y.Z）补 .0，四段（X.Y.Z.W）保持原样，兼容 System.Version 的 2~4 段限制
+    version = tag.lstrip('v')
+    if len(version.split('.')) == 3:
+        return f"{version}.0"
+    return version
+
 def generate_version(filepath, version, changelog):
     return {
-        'version': f"{version}.0",
+        'version': version,
         'changelog': changelog,
         'targetAbi': '10.11.0.0',
-        'sourceUrl': f'https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/v{version}/metashark_{version}.0.zip',
+        'sourceUrl': f'https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/v{version}/metashark_{version}.zip',
         'checksum': md5sum(filepath),
         'timestamp': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     }
@@ -47,9 +54,9 @@ def is_valid_version(version):
 def main():
     filename = sys.argv[1]
     tag = sys.argv[2]
-    version = tag.lstrip('v')
-    if not is_valid_version(f"{version}.0"):
-        raise SystemExit(f"tag {tag} 派生的 manifest version {version}.0 非法：必须纯数字，改用 vX.Y.Z 三段数字 tag（如 v2.3.7），后缀只写进 changelog/Release 文案")
+    version = normalize_version(tag)
+    if not is_valid_version(version):
+        raise SystemExit(f"tag {tag} 派生的 manifest version {version} 非法：必须 2~4 段纯数字（如 v2.3.7 或 v2.3.7.1），后缀只写进 changelog/Release 文案")
     filepath = os.path.join(os.getcwd(), filename)
     result = subprocess.run(['git', 'tag','-l','--format=%(contents)', tag, '-l'], stdout=subprocess.PIPE)
     changelog = result.stdout.decode('utf-8').strip()
@@ -65,7 +72,7 @@ def main():
             raise
 
     # 追加新版本/覆盖旧版本，并顺手清除历史非法版本条目（如 2.3.6-fix1.0）
-    manifest[0]['versions'] = list(filter(lambda x: x['version'] != f"{version}.0" and is_valid_version(x['version']), manifest[0]['versions']))
+    manifest[0]['versions'] = list(filter(lambda x: x['version'] != version and is_valid_version(x['version']), manifest[0]['versions']))
     manifest[0]['versions'].insert(0, generate_version(filepath, version, changelog))
 
     with open('manifest.json', 'w') as f:
