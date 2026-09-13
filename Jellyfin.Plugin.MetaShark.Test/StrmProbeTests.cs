@@ -4,7 +4,9 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
+using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.MediaInfo;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MetaShark.Test
@@ -455,6 +457,77 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.IsTrue(src.SupportsDirectPlay);
             Assert.AreEqual("https://cdn.example.com/movie.mp4", src.Path);
             Assert.AreEqual("mp4", src.Container);
+        }
+
+        // ---------- client resolver (AuthorizationInfo 优先) ----------
+
+        [TestMethod]
+        public void Resolver_Prefers_AuthorizationInfo_Over_Headers()
+        {
+            // 线上真机场景：Yamby 用 api_key 鉴权，请求无鉴权头，
+            // 服务端已把 Client 回填进 HttpContext.Items，必须优先采用。
+            var ctx = new DefaultHttpContext();
+            ctx.Items[StrmClientResolver.AuthorizationInfoItemsKey] = new AuthorizationInfo { Client = "Yamby" };
+            ctx.Request.Headers["X-Emby-Authorization"] = "MediaBrowser Client=\"Other\", Device=\"x\"";
+
+            Assert.AreEqual("Yamby", StrmClientResolver.Resolve(ctx.Request, ctx.Items));
+        }
+
+        [TestMethod]
+        public void Resolver_Items_Without_Headers_Still_Resolves_Yamby()
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Items[StrmClientResolver.AuthorizationInfoItemsKey] = new AuthorizationInfo { Client = "Yamby" };
+
+            var client = StrmClientResolver.Resolve(ctx.Request, ctx.Items);
+            Assert.AreEqual("Yamby", client);
+            Assert.IsTrue(StrmClientPolicy.IsWhitelistedThirdParty(client, StrmClientPolicy.ParseWhitelist("Yamby")));
+        }
+
+        [TestMethod]
+        public void Resolver_FallsBack_To_Authorization_Header()
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.Headers["Authorization"] = "MediaBrowser Client=\"Infuse\", Device=\"x\"";
+
+            Assert.AreEqual("Infuse", StrmClientResolver.Resolve(ctx.Request, ctx.Items));
+        }
+
+        [TestMethod]
+        public void Resolver_FallsBack_To_XEmbyAuthorization_Header()
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.Headers["X-Emby-Authorization"] = "Emby Client=\"Yamby\", Device=\"x\"";
+
+            Assert.AreEqual("Yamby", StrmClientResolver.Resolve(ctx.Request, ctx.Items));
+        }
+
+        [TestMethod]
+        public void Resolver_FallsBack_To_QueryString()
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.QueryString = QueryString.Create("X-Emby-Authorization", "MediaBrowser Client=\"Yamby\"");
+
+            Assert.AreEqual("Yamby", StrmClientResolver.Resolve(ctx.Request, ctx.Items));
+        }
+
+        [TestMethod]
+        public void Resolver_Ignores_Whitespace_Client_In_Items()
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Items[StrmClientResolver.AuthorizationInfoItemsKey] = new AuthorizationInfo { Client = "   " };
+            ctx.Request.Headers["X-Emby-Authorization"] = "MediaBrowser Client=\"Yamby\"";
+
+            Assert.AreEqual("Yamby", StrmClientResolver.Resolve(ctx.Request, ctx.Items));
+        }
+
+        [TestMethod]
+        public void Resolver_Returns_Null_When_Nothing_Resolvable()
+        {
+            var ctx = new DefaultHttpContext();
+            Assert.IsNull(StrmClientResolver.Resolve(ctx.Request, ctx.Items));
+            Assert.IsNull(StrmClientResolver.Resolve(null, null));
+            Assert.IsTrue(StrmClientPolicy.IsNativeClient(StrmClientResolver.Resolve(null, null)));
         }
     }
 }
