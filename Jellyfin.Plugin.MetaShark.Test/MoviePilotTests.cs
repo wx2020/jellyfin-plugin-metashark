@@ -188,10 +188,11 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.AreEqual("电视剧", subject.Category);
             Assert.AreEqual(2023, subject.Year);
             Assert.AreEqual(1, handler.Requests.Count);
-            var url = handler.Requests[0].RequestUri!.ToString();
+            // OriginalString 保留百分号编码形态（Uri.ToString 会解码回中文，故不用它断言编码）
+            var url = handler.Requests[0].RequestUri!.OriginalString;
             Assert.IsTrue(url.Contains("/api/v1/media/douban:3286794?", StringComparison.Ordinal));
             Assert.IsTrue(url.Contains(Uri.EscapeDataString("电视剧"), StringComparison.Ordinal));
-            Assert.IsFalse(url.Contains("tv", StringComparison.Ordinal));
+            Assert.IsTrue(url.Contains("type_name=", StringComparison.Ordinal));
         }
 
         [TestMethod]
@@ -393,7 +394,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.AreEqual("蒂姆·罗宾斯", list[0].Name);
             Assert.AreEqual("安迪", list[0].Role);
             Assert.IsTrue(list[0].Img.StartsWith("https://img1.doubanio.com", StringComparison.Ordinal));
-            var url = handler.Requests[0].RequestUri!.ToString();
+            var url = handler.Requests[0].RequestUri!.OriginalString;
             Assert.IsTrue(url.Contains("/api/v1/douban/credits/1292052/", StringComparison.Ordinal));
             Assert.IsTrue(url.Contains(Uri.EscapeDataString("电影"), StringComparison.Ordinal));
         }
