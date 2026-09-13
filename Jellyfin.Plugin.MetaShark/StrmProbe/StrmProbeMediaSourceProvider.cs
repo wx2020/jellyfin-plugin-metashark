@@ -116,19 +116,7 @@ public sealed class StrmProbeMediaSourceProvider : IMediaSourceProvider
         try
         {
             var context = _httpContextAccessor.HttpContext;
-            var request = context?.Request;
-            if (request == null)
-            {
-                return null;
-            }
-
-            string? auth = request.Headers["X-Emby-Authorization"].ToString();
-            if (string.IsNullOrWhiteSpace(auth))
-            {
-                auth = request.Headers["X-MediaBrowser-Authorization"].ToString();
-            }
-
-            return StrmClientPolicy.ExtractClientName(string.IsNullOrWhiteSpace(auth) ? null : auth);
+            return StrmClientResolver.Resolve(context?.Request, context?.Items);
         }
         catch (Exception ex)
         {
