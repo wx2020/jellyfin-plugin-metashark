@@ -201,21 +201,29 @@
                     </fieldset>
                     <fieldset class="verticalSection verticalSection-extrabottompadding">
                         <legend>
-                            <h3>网盘直链播放探针加速（strm）</h3>
+                            <h3>网盘直链播放（strm）</h3>
                         </legend>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableStrmDirectRedirect">
+                                <input id="EnableStrmDirectRedirect" name="EnableStrmDirectRedirect"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>取流 302 直跳</span>
+                            </label>
+                            <div class="fieldDescription">白名单第三方客户端的纯静态取流直接 302 到网盘直链，手机直连网盘、服务端不再代理字节；默认关闭。转码/混流请求不受影响，部分播放器可能不跟随跳转，开启后请用真机验证</div>
+                        </div>
+                        <div class="inputContainer strmredirect-child">
+                            <label class="inputLabel inputLabelUnfocused" for="StrmProbeClientWhitelist">第三方客户端名单</label>
+                            <input id="StrmProbeClientWhitelist" name="StrmProbeClientWhitelist" type="text"
+                                is="emby-input" placeholder="Yamby;Lenna" />
+                            <div class="fieldDescription">取流 302 直跳的生效客户端名单，逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端不生效</div>
+                        </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label" for="EnableStrmProbeWarmup">
                                 <input id="EnableStrmProbeWarmup" name="EnableStrmProbeWarmup" type="checkbox"
                                     is="emby-checkbox" />
-                                <span>strm 探针缓存预热（总开关）</span>
+                                <span>入库真探（总开关）</span>
                             </label>
-                            <div class="fieldDescription">关闭时入库真探停用；取流 302 直跳由下方独立开关控制</div>
-                        </div>
-                        <div class="inputContainer strmprobe-child">
-                            <label class="inputLabel inputLabelUnfocused" for="StrmProbeClientWhitelist">第三方客户端名单</label>
-                            <input id="StrmProbeClientWhitelist" name="StrmProbeClientWhitelist" type="text"
-                                is="emby-input" placeholder="Yamby" />
-                            <div class="fieldDescription">取流 302 直跳的生效客户端名单，逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端不生效</div>
+                            <div class="fieldDescription">新增 strm 入库后自动在后台做远程探测，与取流 302 直跳相互独立</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
                             <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
@@ -224,14 +232,6 @@
                                 <span>入库真探写入库</span>
                             </label>
                             <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存；默认关闭。会产生网盘探测流量，高峰期谨慎开启</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
-                            <label class="emby-checkbox-label" for="EnableStrmDirectRedirect">
-                                <input id="EnableStrmDirectRedirect" name="EnableStrmDirectRedirect"
-                                    type="checkbox" is="emby-checkbox" />
-                                <span>取流 302 直跳</span>
-                            </label>
-                            <div class="fieldDescription">白名单第三方客户端的纯静态取流直接 302 到网盘直链，手机直连网盘、服务端不再代理字节；默认关闭。转码/混流请求不受影响，部分播放器可能不跟随跳转，开启后请用真机验证</div>
                         </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -290,9 +290,11 @@
                         // setTimeout(0) 等待方式，二次兜底 polyfill 晚到的情况
                         ensureNativeControlsEnhanced();
                         changeStrmProbeDisplay();
+                        changeStrmRedirectDisplay();
                         setTimeout(function () {
                             ensureNativeControlsEnhanced();
                             changeStrmProbeDisplay();
+                            changeStrmRedirectDisplay();
                         }, 0);
 
                         Dashboard.hideLoadingMsg();
@@ -350,10 +352,23 @@
                     changeStrmProbeDisplay();
                 });
 
+            document.querySelector('#EnableStrmDirectRedirect')
+                .addEventListener('change', function (e) {
+                    changeStrmRedirectDisplay();
+                });
+
 
             function changeStrmProbeDisplay() {
                 let enabled = document.querySelector('#EnableStrmProbeWarmup').checked;
                 document.querySelectorAll('.strmprobe-child').forEach(function (el) {
+                    el.style.opacity = enabled ? '1' : '0.5';
+                    el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
+                });
+            }
+
+            function changeStrmRedirectDisplay() {
+                let enabled = document.querySelector('#EnableStrmDirectRedirect').checked;
+                document.querySelectorAll('.strmredirect-child').forEach(function (el) {
                     el.style.opacity = enabled ? '1' : '0.5';
                     el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
                 });
