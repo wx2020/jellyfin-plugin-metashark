@@ -122,6 +122,11 @@ public class PluginConfiguration : BasePluginConfiguration
     public string StrmProbeClientWhitelist { get; set; } = "Yamby";
 
     /// <summary>
+    /// 入库真探写入库：新增 strm 入库去抖后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存。默认关闭。
+    /// </summary>
+    public bool EnableStrmProbeLibraryRefresh { get; set; } = false;
+
+    /// <summary>
     /// 启用 MoviePilot 豆瓣数据优先通道。关闭或未配置时走原有豆瓣直连链路。
     /// </summary>
     public bool EnableMoviePilot { get; set; } = false;

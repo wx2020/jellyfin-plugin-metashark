@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.MediaInfo;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Moq;
 
 namespace Jellyfin.Plugin.MetaShark.Test
 {
@@ -441,6 +442,134 @@ namespace Jellyfin.Plugin.MetaShark.Test
                 {
                 }
             }
+        }
+
+        // ---------- warmup true probe (入库真探) ----------
+
+        private sealed class TestGenericLogger<T> : ILogger<T>
+        {
+            IDisposable ILogger.BeginScope<TState>(TState state) => throw new NotSupportedException();
+
+            bool ILogger.IsEnabled(LogLevel logLevel) => false;
+
+            void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+            }
+        }
+
+        private static MediaBrowser.Controller.Entities.Movie NewStrmMovie(Guid id, string path)
+        {
+            var movie = (MediaBrowser.Controller.Entities.Movie)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(MediaBrowser.Controller.Entities.Movie));
+            movie.Id = id;
+            movie.Name = "probe-target";
+            movie.Path = path;
+            return movie;
+        }
+
+        private static StrmProbeWarmupService NewTrueProbeService(
+            MediaBrowser.Controller.Library.ILibraryManager libraryManager,
+            List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)> calls,
+            bool refreshThrow = false)
+        {
+            var service = new StrmProbeWarmupService(
+                libraryManager,
+                new Mock<MediaBrowser.Model.System.IFileSystem>().Object,
+                new FakeStore(),
+                new FakeProber(),
+                new TestGenericLogger<StrmProbeWarmupService>());
+            service.TestConfigOverride = (true, true);
+            service.DelayAsync = (delay, ct) =>
+            {
+                lock (calls)
+                {
+                    calls.Add((delay, false, false));
+                }
+
+                return Task.CompletedTask;
+            };
+            service.RefreshItemAsync = (item, options, ct) =>
+            {
+                lock (calls)
+                {
+                    calls.Add((TimeSpan.Zero, true, options.EnableRemoteContentProbe));
+                }
+
+                if (refreshThrow)
+                {
+                    throw new InvalidOperationException("refresh boom");
+                }
+
+                return Task.CompletedTask;
+            };
+            return service;
+        }
+
+        [TestMethod]
+        public async Task TrueProbe_Disabled_Skips_Refresh()
+        {
+            var id = Guid.NewGuid();
+            var movie = NewStrmMovie(id, "/strm/a.strm");
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns(movie);
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var service = NewTrueProbeService(lib.Object, calls);
+            service.TestConfigOverride = (true, false);
+
+            await service.DelayedTrueProbeAsync(id, CancellationToken.None);
+
+            Assert.AreEqual(0, calls.FindAll(c => c.Refreshed).Count);
+        }
+
+        [TestMethod]
+        public async Task TrueProbe_Enabled_Waits_Debounce_Then_Refreshes_With_Probe()
+        {
+            var id = Guid.NewGuid();
+            var movie = NewStrmMovie(id, "/strm/b.strm");
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns(movie);
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var service = NewTrueProbeService(lib.Object, calls);
+
+            await service.DelayedTrueProbeAsync(id, CancellationToken.None);
+
+            Assert.AreEqual(1, calls.Count);
+            Assert.AreEqual(StrmProbeConstants.LibraryRefreshDebounce, calls[0].Delay);
+            Assert.IsTrue(calls[0].Refreshed);
+            Assert.IsTrue(calls[0].ProbeEnabled);
+        }
+
+        [TestMethod]
+        public async Task TrueProbe_ItemGone_Or_NotStrm_Skips_Refresh()
+        {
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns((MediaBrowser.Controller.Entities.BaseItem?)null);
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var service = NewTrueProbeService(lib.Object, calls);
+
+            await service.DelayedTrueProbeAsync(Guid.NewGuid(), CancellationToken.None);
+
+            var id2 = Guid.NewGuid();
+            var lib2 = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib2.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns(NewStrmMovie(id2, "/media/plain.mkv"));
+            var service2 = NewTrueProbeService(lib2.Object, calls);
+
+            await service2.DelayedTrueProbeAsync(id2, CancellationToken.None);
+
+            Assert.AreEqual(0, calls.FindAll(c => c.Refreshed).Count);
+        }
+
+        [TestMethod]
+        public async Task TrueProbe_RefreshThrows_Does_Not_Throw()
+        {
+            var id = Guid.NewGuid();
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns(NewStrmMovie(id, "/strm/c.strm"));
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var service = NewTrueProbeService(lib.Object, calls, refreshThrow: true);
+
+            await service.DelayedTrueProbeAsync(id, CancellationToken.None);
+
+            Assert.AreEqual(1, calls.FindAll(c => c.Refreshed).Count);
         }
 
         // ---------- virtual source ----------

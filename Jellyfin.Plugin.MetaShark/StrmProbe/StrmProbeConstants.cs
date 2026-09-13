@@ -15,4 +15,7 @@ public static class StrmProbeConstants
 
     /// <summary>后台预热最大并发数（避免打满网盘站）。</summary>
     public const int MaxConcurrentWarmups = 2;
+
+    /// <summary>入库真探去抖延迟：新增条目入库后等待刮削完成再做完整远程探测。</summary>
+    public static readonly TimeSpan LibraryRefreshDebounce = TimeSpan.FromMinutes(5);
 }
