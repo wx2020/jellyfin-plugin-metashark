@@ -457,9 +457,9 @@ namespace Jellyfin.Plugin.MetaShark.Test
             }
         }
 
-        private static MediaBrowser.Controller.Entities.Movie NewStrmMovie(Guid id, string path)
+        private static MediaBrowser.Controller.Entities.Movies.Movie NewStrmMovie(Guid id, string path)
         {
-            var movie = (MediaBrowser.Controller.Entities.Movie)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(MediaBrowser.Controller.Entities.Movie));
+            var movie = (MediaBrowser.Controller.Entities.Movies.Movie)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(MediaBrowser.Controller.Entities.Movies.Movie));
             movie.Id = id;
             movie.Name = "probe-target";
             movie.Path = path;
