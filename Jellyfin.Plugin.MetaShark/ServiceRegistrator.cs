@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using Jellyfin.Plugin.MetaShark.Api;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
@@ -36,8 +37,8 @@ namespace Jellyfin.Plugin.MetaShark
             });
             serviceCollection.AddSingleton<IStrmProbeCacheStore>((ctx) =>
             {
-                var appHost = ctx.GetRequiredService<IServerApplicationHost>();
-                var dbPath = Path.Combine(appHost.ApplicationPaths.DataPath, "metashark", StrmProbeConstants.DbFileName);
+                var appPaths = ctx.GetRequiredService<IApplicationPaths>();
+                var dbPath = Path.Combine(appPaths.DataPath, "metashark", StrmProbeConstants.DbFileName);
                 return new SqliteStrmProbeCacheStore(dbPath, ctx.GetRequiredService<ILogger<SqliteStrmProbeCacheStore>>());
             });
             serviceCollection.AddSingleton<IStrmProber>((ctx) =>
