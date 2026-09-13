@@ -473,7 +473,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
         {
             var service = new StrmProbeWarmupService(
                 libraryManager,
-                new Mock<MediaBrowser.Model.System.IFileSystem>().Object,
+                new Mock<MediaBrowser.Model.IO.IFileSystem>().Object,
                 new FakeStore(),
                 new FakeProber(),
                 new TestGenericLogger<StrmProbeWarmupService>());
