@@ -348,6 +348,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var warmup = NewTrueProbeService(lib.Object, calls);
             warmup.TestConfigOverride = false;
             var task = NewDailyTask(lib.Object, msm, warmup);
+            task.TestConfigOverride = false;
 
             var progress = new Progress<double>();
             await task.ExecuteAsync(progress, CancellationToken.None);
@@ -373,6 +374,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
             var warmup = NewTrueProbeService(lib.Object, calls);
             var task = NewDailyTask(lib.Object, msm, warmup);
+            task.TestConfigOverride = true;
 
             await task.ExecuteAsync(new Progress<double>(), CancellationToken.None);
 

@@ -27,6 +27,11 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
         private readonly ILogger<StrmMediaProbeDailyTask> _logger;
 
         /// <summary>
+        /// 测试用配置覆盖（沿用 <c>StrmProbeWarmupService.TestConfigOverride</c> 模式，保证单测离线确定性）。
+        /// </summary>
+        internal bool? TestConfigOverride { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="StrmMediaProbeDailyTask"/> class.
         /// </summary>
         public StrmMediaProbeDailyTask(
@@ -63,8 +68,8 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
         /// <inheritdoc />
         public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
         {
-            var config = Plugin.Instance?.Configuration;
-            if (config == null || !config.EnableStrmProbeLibraryRefresh)
+            var enabled = TestConfigOverride ?? (Plugin.Instance?.Configuration?.EnableStrmProbeLibraryRefresh ?? false);
+            if (!enabled)
             {
                 _logger.LogInformation("strm 每日探测：入库媒体探测开关未开启，跳过");
                 progress.Report(100);
