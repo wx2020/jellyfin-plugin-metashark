@@ -48,6 +48,7 @@ namespace Jellyfin.Plugin.MetaShark.Providers
         protected readonly TmdbApi _tmdbApi;
         protected readonly OmdbApi _omdbApi;
         protected readonly ImdbApi _imdbApi;
+        protected readonly MoviePilotApi? _moviePilotApi;
         protected readonly ILibraryManager _libraryManager;
         protected readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -64,16 +65,180 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             }
         }
 
-        protected BaseProvider(IHttpClientFactory httpClientFactory, ILogger logger, ILibraryManager libraryManager, IHttpContextAccessor httpContextAccessor, DoubanApi doubanApi, TmdbApi tmdbApi, OmdbApi omdbApi, ImdbApi imdbApi)
+        protected BaseProvider(IHttpClientFactory httpClientFactory, ILogger logger, ILibraryManager libraryManager, IHttpContextAccessor httpContextAccessor, DoubanApi doubanApi, TmdbApi tmdbApi, OmdbApi omdbApi, ImdbApi imdbApi, MoviePilotApi? moviePilotApi = null)
         {
             this._doubanApi = doubanApi;
             this._tmdbApi = tmdbApi;
             this._omdbApi = omdbApi;
             this._imdbApi = imdbApi;
+            this._moviePilotApi = moviePilotApi;
             this._libraryManager = libraryManager;
             this._logger = logger;
             this._httpClientFactory = httpClientFactory;
             this._httpContextAccessor = httpContextAccessor;
+        }
+
+        /// <summary>
+        /// MoviePilot 优先通道是否可用（开关开且 BaseURL/API_TOKEN 已配置）。不可用时调用方走原有直连链路。
+        /// </summary>
+        protected bool IsMoviePilotEnabled()
+        {
+            return this._moviePilotApi?.IsConfigured() == true;
+        }
+
+        /// <summary>
+        /// MoviePilot 优先搜索（M2）。未启用、未命中或异常时返回空列表，由调用方回退直连。
+        /// </summary>
+        protected async Task<List<DoubanSubject>> SearchMoviePilotAsync(string keyword, bool isMovie, CancellationToken cancellationToken)
+        {
+            if (!IsMoviePilotEnabled() || string.IsNullOrWhiteSpace(keyword))
+            {
+                return new List<DoubanSubject>();
+            }
+
+            try
+            {
+                return await this._moviePilotApi!.SearchMediaAsync(keyword, isMovie, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogDebug(ex, "[MetaShark] MoviePilot 搜索失败，回退直连");
+                return new List<DoubanSubject>();
+            }
+        }
+
+        /// <summary>
+        /// MoviePilot 优先详情（M1/D1）与阵容（D2）。详情未命中或异常时返回 null，由调用方回退直连；
+        /// 阵容为空时调用方再回退直连阵容（本方法内不调直连，保证回退路径唯一）。
+        /// </summary>
+        protected async Task<DoubanSubject?> GetMoviePilotSubjectAsync(string sid, bool isMovie, CancellationToken cancellationToken)
+        {
+            if (!IsMoviePilotEnabled() || string.IsNullOrWhiteSpace(sid))
+            {
+                return null;
+            }
+
+            try
+            {
+                var subject = await this._moviePilotApi!.GetDetailAsync(sid, isMovie, cancellationToken).ConfigureAwait(false);
+                if (subject == null)
+                {
+                    return null;
+                }
+
+                try
+                {
+                    subject.Celebrities = await this._moviePilotApi.GetCreditsAsync(sid, isMovie, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogDebug(ex, "[MetaShark] MoviePilot 阵容获取失败，回退直连阵容");
+                    subject.Celebrities = new List<DoubanCelebrity>();
+                }
+
+                return subject;
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogDebug(ex, "[MetaShark] MoviePilot 详情失败，回退直连");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// MoviePilot 优先人物详情（D4）。未命中或异常时返回 null，由调用方回退直连。
+        /// </summary>
+        protected async Task<DoubanCelebrity?> GetMoviePilotPersonAsync(string cid, CancellationToken cancellationToken)
+        {
+            if (!IsMoviePilotEnabled() || string.IsNullOrWhiteSpace(cid))
+            {
+                return null;
+            }
+
+            try
+            {
+                return await this._moviePilotApi!.GetPersonAsync(cid, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogDebug(ex, "[MetaShark] MoviePilot 人物详情失败，回退直连");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// MoviePilot 优先人物搜索（M2 type=person）。未启用、未命中或异常时返回空列表，由调用方回退直连。
+        /// </summary>
+        protected async Task<List<DoubanCelebrity>> SearchMoviePilotPersonAsync(string keyword, CancellationToken cancellationToken)
+        {
+            if (!IsMoviePilotEnabled() || string.IsNullOrWhiteSpace(keyword))
+            {
+                return new List<DoubanCelebrity>();
+            }
+
+            try
+            {
+                return await this._moviePilotApi!.SearchPersonAsync(keyword, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogDebug(ex, "[MetaShark] MoviePilot 人物搜索失败，回退直连");
+                return new List<DoubanCelebrity>();
+            }
+        }
+
+        /// <summary>
+        /// MoviePilot 优先识别（M3 识别 + M2 搜索）。未命中或异常时返回 null，由调用方走原有直连识别。
+        /// </summary>
+        protected async Task<string?> GuessByMoviePilotAsync(ItemLookupInfo info, string searchName, CancellationToken cancellationToken)
+        {
+            if (!IsMoviePilotEnabled() || string.IsNullOrWhiteSpace(searchName))
+            {
+                return null;
+            }
+
+            var isMovie = info is MovieInfo;
+            var cat = isMovie ? "电影" : "电视剧";
+            try
+            {
+                // M3 标题识别优先
+                var recognized = await this._moviePilotApi!.RecognizeAsync(searchName, isMovie, cancellationToken).ConfigureAwait(false);
+                if (recognized != null && !string.IsNullOrEmpty(recognized.Sid)
+                    && (string.IsNullOrEmpty(recognized.Category) || recognized.Category == cat)
+                    && (info.Year == null || info.Year <= 0 || recognized.Year <= 0 || recognized.Year == info.Year))
+                {
+                    this.Log($"Found douban [id]: {recognized.Name}({recognized.Sid}) (moviepilot recognize)");
+                    return recognized.Sid;
+                }
+
+                // M2 按名搜索，过滤规则与直连一致
+                var results = await this._moviePilotApi.SearchMediaAsync(searchName, isMovie, cancellationToken).ConfigureAwait(false);
+                DoubanSubject? item;
+                if (info.Year != null && info.Year > 0)
+                {
+                    item = results.Where(x => x.Category == cat && x.Year == info.Year).FirstOrDefault();
+                    if (item != null)
+                    {
+                        this.Log($"Found douban [id]: {item.Name}({item.Sid}) (moviepilot search)");
+                        return item.Sid;
+                    }
+
+                    return null;
+                }
+
+                item = results.Where(x => x.Category == cat).FirstOrDefault();
+                if (item != null)
+                {
+                    this.Log($"Found douban [id] by first match: {item.Name}({item.Sid}) (moviepilot search)");
+                    return item.Sid;
+                }
+            }
+            catch (Exception ex)
+            {
+                this._logger.LogDebug(ex, "[MetaShark] MoviePilot 识别失败，回退直连识别");
+            }
+
+            return null;
         }
 
         protected async Task<TMDbLib.Objects.Search.TvSeasonEpisode?> GetEpisodeAsync(int seriesTmdbId, int? seasonNumber, int? episodeNumber, string displayOrder, string? language, string? imageLanguages, CancellationToken cancellationToken)
@@ -181,6 +346,16 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             List<DoubanSubject> result;
             DoubanSubject? item;
 
+            // MoviePilot 优先通道（M3 识别 + M2 搜索），未命中时继续走原有直连逻辑
+            if (IsMoviePilotEnabled() && !string.IsNullOrWhiteSpace(searchName))
+            {
+                var moviePilotSid = await this.GuessByMoviePilotAsync(info, searchName, cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(moviePilotSid))
+                {
+                    return moviePilotSid;
+                }
+            }
+
             // 假如存在年份，先通过suggest接口查找，减少搜索页访问次数，避免封禁（suggest没法区分电影或电视剧，排序也比搜索页差些）
             if (config.EnableDoubanAvoidRiskControl)
             {
@@ -250,6 +425,29 @@ namespace Jellyfin.Plugin.MetaShark.Providers
 
             this.Log($"GuestDoubanSeasonByYear of [name]: {seriesName} [year]: {year}");
 
+            // MoviePilot 优先通道（M2 搜索），未命中时继续走原有直连逻辑
+            if (IsMoviePilotEnabled() && !string.IsNullOrWhiteSpace(seriesName))
+            {
+                try
+                {
+                    var mpResults = await this._moviePilotApi!.SearchMediaAsync(seriesName, false, cancellationToken).ConfigureAwait(false);
+                    var mpItem = mpResults.Where(x => x.Category == "电视剧" && x.Year == year).FirstOrDefault();
+                    if (mpItem != null && !string.IsNullOrEmpty(mpItem.Sid))
+                    {
+                        var mpIndexNumber = ParseChineseSeasonNumberByName(mpItem.Name);
+                        if (!mpIndexNumber.HasValue || !seasonNumber.HasValue || mpIndexNumber == seasonNumber)
+                        {
+                            this.Log($"Found douban [id]: {mpItem.Name}({mpItem.Sid}) (moviepilot search)");
+                            return mpItem.Sid;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogDebug(ex, "[MetaShark] MoviePilot 季识别失败，回退直连");
+                }
+            }
+
             // 先通过suggest接口查找，减少搜索页访问次数，避免封禁（suggest没法区分电影或电视剧，排序也比搜索页差些）
             if (config.EnableDoubanAvoidRiskControl)
             {
@@ -310,6 +508,25 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                 seasonName = name;
             }
             this.Log($"GuestDoubanSeasonBySeasonNameAsync of [name]: {seasonName} 或 {chineseSeasonName}");
+
+            // MoviePilot 优先通道（M2 搜索），未命中时继续走原有直连逻辑
+            if (IsMoviePilotEnabled() && !string.IsNullOrWhiteSpace(name))
+            {
+                try
+                {
+                    var mpResults = await this._moviePilotApi!.SearchMediaAsync(name, false, cancellationToken).ConfigureAwait(false);
+                    var mpItem = mpResults.Where(x => x.Category == "电视剧" && x.Rating > 0 && (x.Name == seasonName || x.Name == chineseSeasonName)).FirstOrDefault();
+                    if (mpItem != null && !string.IsNullOrEmpty(mpItem.Sid))
+                    {
+                        this.Log($"Found douban [id]: {mpItem.Name}({mpItem.Sid}) (moviepilot search)");
+                        return mpItem.Sid;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this._logger.LogDebug(ex, "[MetaShark] MoviePilot 季名识别失败，回退直连");
+                }
+            }
 
             // 通过名称精确匹配
             var result = await this._doubanApi.SearchAsync(name, cancellationToken).ConfigureAwait(false);

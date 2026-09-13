@@ -23,8 +23,8 @@ namespace Jellyfin.Plugin.MetaShark.Providers
     /// </summary>
     public class PersonProvider : BaseProvider, IRemoteMetadataProvider<Person, PersonLookupInfo>
     {
-        public PersonProvider(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ILibraryManager libraryManager, IHttpContextAccessor httpContextAccessor, DoubanApi doubanApi, TmdbApi tmdbApi, OmdbApi omdbApi, ImdbApi imdbApi)
-            : base(httpClientFactory, loggerFactory.CreateLogger<PersonProvider>(), libraryManager, httpContextAccessor, doubanApi, tmdbApi, omdbApi, imdbApi)
+        public PersonProvider(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ILibraryManager libraryManager, IHttpContextAccessor httpContextAccessor, DoubanApi doubanApi, TmdbApi tmdbApi, OmdbApi omdbApi, ImdbApi imdbApi, MoviePilotApi? moviePilotApi = null)
+            : base(httpClientFactory, loggerFactory.CreateLogger<PersonProvider>(), libraryManager, httpContextAccessor, doubanApi, tmdbApi, omdbApi, imdbApi, moviePilotApi)
         {
         }
 
@@ -40,7 +40,10 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             var cid = searchInfo.GetProviderId(DoubanProviderId);
             if (!string.IsNullOrEmpty(cid))
             {
-                var celebrity = await this._doubanApi.GetCelebrityAsync(cid, cancellationToken).ConfigureAwait(false);
+                // MoviePilot 优先通道（D4 人物详情），未命中时回退豆瓣直连
+                var moviePilotCelebrity = await this.GetMoviePilotPersonAsync(cid, cancellationToken).ConfigureAwait(false);
+                var celebrity = moviePilotCelebrity
+                    ?? await this._doubanApi.GetCelebrityAsync(cid, cancellationToken).ConfigureAwait(false);
                 if (celebrity != null)
                 {
                     result.Add(new RemoteSearchResult
@@ -58,7 +61,11 @@ namespace Jellyfin.Plugin.MetaShark.Providers
 
 
 
-            var res = await this._doubanApi.SearchCelebrityAsync(searchInfo.Name, cancellationToken).ConfigureAwait(false);
+            // MoviePilot 优先通道（M2 人物搜索），未命中或异常时回退豆瓣直连搜索
+            var mpPersons = await this.SearchMoviePilotPersonAsync(searchInfo.Name, cancellationToken).ConfigureAwait(false);
+            var res = mpPersons.Count > 0
+                ? mpPersons
+                : await this._doubanApi.SearchCelebrityAsync(searchInfo.Name, cancellationToken).ConfigureAwait(false);
             result.AddRange(res.Take(Configuration.PluginConfiguration.MAX_SEARCH_RESULT).Select(x =>
             {
                 return new RemoteSearchResult
@@ -82,8 +89,9 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             this.Log($"GetPersonMetadata of [name]: {info.Name} [cid]: {cid}");
             if (!string.IsNullOrEmpty(cid))
             {
-
-                var c = await this._doubanApi.GetCelebrityAsync(cid, cancellationToken).ConfigureAwait(false);
+                // MoviePilot 优先通道（D4 人物详情），未命中时回退豆瓣直连
+                var c = await this.GetMoviePilotPersonAsync(cid, cancellationToken).ConfigureAwait(false)
+                    ?? await this._doubanApi.GetCelebrityAsync(cid, cancellationToken).ConfigureAwait(false);
                 if (c != null)
                 {
                     var item = new Person
