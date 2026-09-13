@@ -1,4 +1,6 @@
 using System;
+using System.Security.Cryptography;
+using System.Text;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.MediaInfo;
@@ -13,31 +15,30 @@ public static class StrmVirtualSourceFactory
     /// <summary>
     /// 构造虚拟直连源。
     /// </summary>
-    /// <param name="key">缓存 key（写入 ETag）。</param>
-    /// <param name="directUrl">可直连 URL。</param>
+    /// <param name="key">缓存 key（写入 ETag，并派生确定性 Guid Id）。</param>
+    /// <param name="url">直链 URL（openlist 原始签址或已验证直链）。</param>
     /// <param name="size">内容长度（可为空）。</param>
     /// <param name="contentType">内容类型（可为空，用于推断容器）。</param>
     /// <returns>虚拟 MediaSource。</returns>
-    public static MediaSourceInfo Build(string key, string directUrl, long? size, string? contentType)
+    public static MediaSourceInfo Build(string key, string url, long? size, string? contentType)
     {
-        if (string.IsNullOrWhiteSpace(directUrl))
+        if (string.IsNullOrWhiteSpace(url))
         {
-            throw new ArgumentException("直连 URL 不能为空", nameof(directUrl));
+            throw new ArgumentException("直连 URL 不能为空", nameof(url));
         }
 
         var safeKey = key ?? string.Empty;
-        var shortKey = safeKey.Length > 16 ? safeKey.Substring(0, 16) : safeKey;
         return new MediaSourceInfo
         {
-            Id = StrmProbeConstants.VirtualSourceIdPrefix + shortKey,
+            Id = DeriveStableId(safeKey),
             Protocol = MediaProtocol.Http,
             Type = MediaSourceType.Default,
-            Path = directUrl,
+            Path = url,
             IsRemote = true,
             Name = "MetaShark 直连",
             ETag = safeKey,
             Size = size,
-            Container = GuessContainer(directUrl, contentType),
+            Container = GuessContainer(url, contentType),
             SupportsTranscoding = false,
             SupportsDirectStream = true,
             SupportsDirectPlay = true,
@@ -47,6 +48,19 @@ public static class StrmVirtualSourceFactory
             RequiresLooping = false,
             ReadAtNativeFramerate = false,
         };
+    }
+
+    /// <summary>
+    /// 由缓存 key 派生确定性 Guid 形式的 Id：同一文件跨请求/重启稳定，
+    /// 且可被服务端 <c>Guid.Parse</c> 解析（混流/转码路径 <c>StreamingHelpers.GetStreamingState</c> 会解析 MediaSourceId）。
+    /// </summary>
+    /// <param name="key">缓存 key。</param>
+    /// <returns>32 位无连字符的 Guid 字符串。</returns>
+    private static string DeriveStableId(string key)
+    {
+        using var md5 = MD5.Create();
+        var hash = md5.ComputeHash(Encoding.UTF8.GetBytes(key));
+        return new Guid(hash).ToString("N");
     }
 
     private static string? GuessContainer(string directUrl, string? contentType)
