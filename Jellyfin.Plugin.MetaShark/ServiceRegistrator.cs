@@ -1,5 +1,10 @@
+using System.IO;
+using System.Net.Http;
 using Jellyfin.Plugin.MetaShark.Api;
+using Jellyfin.Plugin.MetaShark.StrmProbe;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -12,6 +17,7 @@ namespace Jellyfin.Plugin.MetaShark
         /// <inheritdoc />
         public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
         {
+            serviceCollection.AddHttpContextAccessor();
             serviceCollection.AddHostedService<BoxSetManager>();
             serviceCollection.AddSingleton((ctx) =>
             {
@@ -29,6 +35,20 @@ namespace Jellyfin.Plugin.MetaShark
             {
                 return new ImdbApi(ctx.GetRequiredService<ILoggerFactory>());
             });
+            serviceCollection.AddSingleton<IStrmProbeCacheStore>((ctx) =>
+            {
+                var appPaths = ctx.GetRequiredService<IApplicationPaths>();
+                var dbPath = Path.Combine(appPaths.DataPath, "metashark", StrmProbeConstants.DbFileName);
+                return new SqliteStrmProbeCacheStore(dbPath, ctx.GetRequiredService<ILogger<SqliteStrmProbeCacheStore>>());
+            });
+            serviceCollection.AddSingleton<IStrmProber>((ctx) =>
+            {
+                return new HttpStrmProber(
+                    ctx.GetRequiredService<IHttpClientFactory>(),
+                    ctx.GetRequiredService<ILogger<HttpStrmProber>>());
+            });
+            serviceCollection.AddSingleton<IMediaSourceProvider, StrmProbeMediaSourceProvider>();
+            serviceCollection.AddHostedService<StrmProbeWarmupService>();
         }
     }
 }

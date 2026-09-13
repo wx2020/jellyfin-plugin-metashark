@@ -105,4 +105,19 @@ public class PluginConfiguration : BasePluginConfiguration
 
         return null;
     }
+
+    /// <summary>
+    /// strm 探针缓存预热总开关。关闭时整个加速链路（缓存读取、虚拟直连、后台预热）全部停用。
+    /// </summary>
+    public bool EnableStrmProbeWarmup { get; set; } = false;
+
+    /// <summary>
+    /// 无缓存时返回直链（仅白名单第三方客户端生效）。关闭时缓存未命中走原生行为（但仍会后台预热写缓存）。
+    /// </summary>
+    public bool EnableStrmProbeDirectOnCacheMiss { get; set; } = true;
+
+    /// <summary>
+    /// 第三方客户端名单，逗号/分号/换行分隔，大小写不敏感。默认仅 Yamby。
+    /// </summary>
+    public string StrmProbeClientWhitelist { get; set; } = "Yamby";
 }
