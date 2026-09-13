@@ -182,6 +182,18 @@ namespace Jellyfin.Plugin.MetaShark.Test
         }
 
         [TestMethod]
+        public void Decide_ByContainerAction_Redirects()
+        {
+            // /Videos/{id}/stream.mkv 走的是 GetVideoStreamByContainer（core 10.11 实测），不是 GetVideoStream。
+            var decision = StrmDirectRedirectFilter.Decide(
+                "GET", "Videos", "GetVideoStreamByContainer", BaseArgs(),
+                "Lenna", Whitelist("Lenna"), true, ItemId, StrmUrl, FileSize, Signature);
+            Assert.IsNotNull(decision);
+            Assert.AreEqual(StrmUrl, decision.TargetUrl);
+            Assert.AreEqual("native", decision.SourceKind);
+        }
+
+        [TestMethod]
         public void Decide_HeadMethod_Redirects()
         {
             var decision = StrmDirectRedirectFilter.Decide(
