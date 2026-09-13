@@ -52,6 +52,16 @@ namespace Jellyfin.Plugin.MetaShark
                     ctx.GetRequiredService<ILogger<HttpStrmProber>>());
             });
             serviceCollection.AddSingleton<IMediaSourceProvider, StrmProbeMediaSourceProvider>();
+            serviceCollection.AddSingleton<IMediaInfoProbeCacheStore>((ctx) =>
+            {
+                var appPaths = ctx.GetRequiredService<IApplicationPaths>();
+                var dbPath = Path.Combine(appPaths.DataPath, "metashark", StrmProbeConstants.DbFileName);
+                return new SqliteMediaInfoProbeCacheStore(dbPath, ctx.GetRequiredService<ILogger<SqliteMediaInfoProbeCacheStore>>());
+            });
+
+            // B 方案：装饰 core 的 IMediaEncoder，只缓存 http/https 远程探测的 ffprobe 结果，
+            // 使 strm 条目重复的远程内容探测不再真实出网。本地文件探测与其它方法全部直通。
+            CachingMediaEncoderProxy.Decorate(serviceCollection);
             serviceCollection.AddHostedService<StrmProbeWarmupService>();
         }
     }

@@ -23,4 +23,4 @@ jobs:
       - name: Build
         run: dotnet build --no-restore
       - name: Test (offline deterministic suites only; live Douban/TMDB live-API tests are excluded as they require external sites)
-        run: dotnet test --no-restore --verbosity normal --filter "FullyQualifiedName~StrmProbeTests|FullyQualifiedName~StringSimilarityTest|FullyQualifiedName~DoubanApiCookieParsingTest|FullyQualifiedName~ParseNameTest|FullyQualifiedName~MoviePilotTests"
+        run: dotnet test --no-restore --verbosity normal --filter "FullyQualifiedName~StrmProbeTests|FullyQualifiedName~MediaInfoProbeCacheTests|FullyQualifiedName~StringSimilarityTest|FullyQualifiedName~DoubanApiCookieParsingTest|FullyQualifiedName~ParseNameTest|FullyQualifiedName~MoviePilotTests"

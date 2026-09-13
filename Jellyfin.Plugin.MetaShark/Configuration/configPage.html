@@ -225,6 +225,14 @@
                                 is="emby-input" placeholder="Yamby" />
                             <div class="fieldDescription">逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端一律走原生行为</div>
                         </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
+                            <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
+                                <input id="EnableStrmProbeLibraryRefresh" name="EnableStrmProbeLibraryRefresh"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>入库真探写入库</span>
+                            </label>
+                            <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存；默认关闭。会产生网盘探测流量，高峰期谨慎开启</div>
+                        </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                         <span>Save</span>
@@ -273,6 +281,7 @@
                         document.querySelector('#EnableStrmProbeWarmup').checked = config.EnableStrmProbeWarmup === true;
                         document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked = config.EnableStrmProbeDirectOnCacheMiss !== false;
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
+                        document.querySelector('#EnableStrmProbeLibraryRefresh').checked = config.EnableStrmProbeLibraryRefresh === true;
 
                         changeProxyDisplay();
                         checkDoubanLogin();
@@ -319,6 +328,7 @@
                         config.EnableStrmProbeWarmup = document.querySelector('#EnableStrmProbeWarmup').checked;
                         config.EnableStrmProbeDirectOnCacheMiss = document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked;
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;
+                        config.EnableStrmProbeLibraryRefresh = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
 
