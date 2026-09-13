@@ -43,7 +43,12 @@ jobs:
           fi
           CHANGE_LOG=$(git tag -l '--format=%(contents)' ${{ github.ref_name }})
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          echo "CHANGE_LOG=${CHANGE_LOG}" >> $GITHUB_OUTPUT
+          # CHANGE_LOG 为多行文本，必须用 heredoc 写入 GITHUB_OUTPUT，否则多行内容会报 Invalid format
+          {
+            echo "CHANGE_LOG<<EOF"
+            echo "${CHANGE_LOG}"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
           echo "APP_NAME=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_OUTPUT
       - name: Build
         run: |
