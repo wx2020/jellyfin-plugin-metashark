@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Net;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -19,6 +19,8 @@ namespace Jellyfin.Plugin.MetaShark.StrmProbe;
 /// 任一条件不满足即放行（走原生管道），fail-closed，永不抛异常。
 /// 用全局 ActionFilter 而不用 <c>IStartupFilter</c> 中间件：后者包在 core 鉴权外层，
 /// 执行时 <c>HttpContext.User</c> 尚未认证，做不了"已认证用户 + 条目可见"的放行门控。
+/// 客户端/用户身份取自 <c>HttpContext.User</c> claims（core 10.11 认证链写入，api_key 认证同样回填 Client）；
+/// Items["AuthorizationInfo"] 在 10.11 正常请求里恒为空，不作依赖。
 /// </summary>
 public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
 {
@@ -130,7 +132,9 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         }
 
         var args = context.ActionArguments;
-        var clientName = StrmClientResolver.Resolve(httpContext.Request, httpContext.Items);
+        // 客户端名：core 10.11 认证链把 Client/UserId 等写进 User claims（api_key 认证也回填），
+        // claims 优先；请求头解析仅作未认证场景的兼容回退。
+        var clientName = ResolveClientName(httpContext);
         var whitelist = StrmClientPolicy.ParseWhitelist(config.StrmProbeClientWhitelist);
 
         if (!TryGetItemId(args, out var itemId))
@@ -144,7 +148,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
             return null;
         }
 
-        if (!TryResolveVisibleUser(httpContext.Items, item, out _))
+        if (!TryResolveVisibleUser(httpContext, item))
         {
             return null;
         }
@@ -368,45 +372,65 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         return Guid.TryParse(value.ToString(), out itemId) && itemId != Guid.Empty;
     }
 
-    private bool TryResolveVisibleUser(
-        IDictionary<object, object?> items,
-        MediaBrowser.Controller.Entities.BaseItem item,
-        out object? user)
+    /// <summary>
+    /// 从已认证用户 claims 取值（core 10.11 认证链写入 Jellyfin-* claims）。
+    /// </summary>
+    internal static string? GetClaim(System.Security.Claims.ClaimsPrincipal? user, string claimType)
     {
-        user = null;
+        var value = user?.FindFirst(claimType)?.Value;
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>
+    /// 解析当前请求客户端名：claims 的 Jellyfin-Client 优先（api_key 认证同样回填），
+    /// 回退请求头/Items 解析（兼容未走认证链的场景）。解析不到返回 null。
+    /// </summary>
+    internal string? ResolveClientName(HttpContext httpContext)
+    {
         try
         {
-            if (items == null
-                || !items.TryGetValue(StrmClientResolver.AuthorizationInfoItemsKey, out var cached)
-                || cached is not AuthorizationInfo authInfo)
+            var claimClient = GetClaim(httpContext.User, "Jellyfin-Client");
+            if (claimClient != null)
+            {
+                return claimClient;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "读取客户端 claims 失败，回退请求头解析");
+        }
+
+        return StrmClientResolver.Resolve(httpContext.Request, httpContext.Items);
+    }
+
+    /// <summary>
+    /// 用户可见性门控：claims 的 Jellyfin-UserId 回查用户并校验条目可见。
+    /// 不再依赖 Items["AuthorizationInfo"]：core 10.11 认证链（AuthService.Authenticate(HttpRequest)）
+    /// 不写该 Items 键，正常 API 请求里恒为空。
+    /// </summary>
+    private bool TryResolveVisibleUser(HttpContext httpContext, MediaBrowser.Controller.Entities.BaseItem item)
+    {
+        try
+        {
+            var userIdValue = GetClaim(httpContext.User, "Jellyfin-UserId");
+            if (userIdValue == null
+                || !Guid.TryParse(userIdValue, out var userId)
+                || userId == Guid.Empty)
             {
                 return false;
             }
 
-            if (authInfo.User != null)
-            {
-                user = authInfo.User;
-                return item.IsVisible(authInfo.User, false);
-            }
-
-            if (authInfo.UserId == Guid.Empty)
+            var user = _userManager.GetUserById(userId);
+            if (user == null || !item.IsVisible(user, false))
             {
                 return false;
             }
 
-            var resolved = _userManager.GetUserById(authInfo.UserId);
-            if (resolved == null || !item.IsVisible(resolved, false))
-            {
-                return false;
-            }
-
-            user = resolved;
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "strm 302 直跳用户可见性校验失败，回退原生管道");
-            user = null;
             return false;
         }
     }
