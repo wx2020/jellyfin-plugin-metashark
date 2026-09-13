@@ -107,17 +107,12 @@ public class PluginConfiguration : BasePluginConfiguration
     }
 
     /// <summary>
-    /// strm 加速总开关：入库真探（配合 EnableStrmProbeLibraryRefresh）。取流 302 直跳不受此开关控制（独立 EnableStrmDirectRedirect）。
-    /// </summary>
-    public bool EnableStrmProbeWarmup { get; set; } = false;
-
-    /// <summary>
     /// 第三方客户端名单（取流 302 直跳生效范围），逗号/分号/换行分隔，大小写不敏感。默认仅 Yamby。
     /// </summary>
     public string StrmProbeClientWhitelist { get; set; } = "Yamby";
 
     /// <summary>
-    /// 入库真探写入库：新增 strm 入库去抖后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存。默认关闭。
+    /// 入库真探：新增 strm 入库去抖后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存。默认关闭。与取流 302 直跳相互独立。
     /// </summary>
     public bool EnableStrmProbeLibraryRefresh { get; set; } = false;
 

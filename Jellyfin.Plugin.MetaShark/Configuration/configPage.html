@@ -218,20 +218,12 @@
                             <div class="fieldDescription">取流 302 直跳的生效客户端名单，逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端不生效</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label" for="EnableStrmProbeWarmup">
-                                <input id="EnableStrmProbeWarmup" name="EnableStrmProbeWarmup" type="checkbox"
-                                    is="emby-checkbox" />
-                                <span>入库真探（总开关）</span>
-                            </label>
-                            <div class="fieldDescription">新增 strm 入库后自动在后台做远程探测，与取流 302 直跳相互独立</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
                             <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
                                 <input id="EnableStrmProbeLibraryRefresh" name="EnableStrmProbeLibraryRefresh"
                                     type="checkbox" is="emby-checkbox" />
-                                <span>入库真探写入库</span>
+                                <span>入库真探</span>
                             </label>
-                            <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存；默认关闭。会产生网盘探测流量，高峰期谨慎开启</div>
+                            <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存，使首次详情页/播放不再真实出网；默认关闭。与取流 302 直跳相互独立。会产生网盘探测流量，高峰期谨慎开启</div>
                         </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -278,7 +270,6 @@
                         document.querySelector('#MoviePilotBaseUrl').value = config.MoviePilotBaseUrl || '';
                         document.querySelector('#MoviePilotApiToken').value = config.MoviePilotApiToken || '';
 
-                        document.querySelector('#EnableStrmProbeWarmup').checked = config.EnableStrmProbeWarmup === true;
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
                         document.querySelector('#EnableStrmProbeLibraryRefresh').checked = config.EnableStrmProbeLibraryRefresh === true;
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
@@ -289,11 +280,9 @@
                         // 先补齐控件增强，再应用 strm 子开关状态；并对齐官方 loadView 的
                         // setTimeout(0) 等待方式，二次兜底 polyfill 晚到的情况
                         ensureNativeControlsEnhanced();
-                        changeStrmProbeDisplay();
                         changeStrmRedirectDisplay();
                         setTimeout(function () {
                             ensureNativeControlsEnhanced();
-                            changeStrmProbeDisplay();
                             changeStrmRedirectDisplay();
                         }, 0);
 
@@ -327,7 +316,6 @@
                         config.EnableMoviePilot = document.querySelector('#EnableMoviePilot').checked;
                         config.MoviePilotBaseUrl = document.querySelector('#MoviePilotBaseUrl').value;
                         config.MoviePilotApiToken = document.querySelector('#MoviePilotApiToken').value;
-                        config.EnableStrmProbeWarmup = document.querySelector('#EnableStrmProbeWarmup').checked;
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;
                         config.EnableStrmProbeLibraryRefresh = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
@@ -347,24 +335,11 @@
                     changeProxyDisplay();
                 });
 
-            document.querySelector('#EnableStrmProbeWarmup')
-                .addEventListener('change', function (e) {
-                    changeStrmProbeDisplay();
-                });
-
             document.querySelector('#EnableStrmDirectRedirect')
                 .addEventListener('change', function (e) {
                     changeStrmRedirectDisplay();
                 });
 
-
-            function changeStrmProbeDisplay() {
-                let enabled = document.querySelector('#EnableStrmProbeWarmup').checked;
-                document.querySelectorAll('.strmprobe-child').forEach(function (el) {
-                    el.style.opacity = enabled ? '1' : '0.5';
-                    el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
-                });
-            }
 
             function changeStrmRedirectDisplay() {
                 let enabled = document.querySelector('#EnableStrmDirectRedirect').checked;
