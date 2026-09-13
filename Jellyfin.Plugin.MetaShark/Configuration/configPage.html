@@ -247,8 +247,16 @@
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
 
                         changeProxyDisplay();
-                        changeStrmProbeDisplay();
                         checkDoubanLogin();
+
+                        // 先补齐控件增强，再应用 strm 子开关状态；并对齐官方 loadView 的
+                        // setTimeout(0) 等待方式，二次兜底 polyfill 晚到的情况
+                        ensureNativeControlsEnhanced();
+                        changeStrmProbeDisplay();
+                        setTimeout(function () {
+                            ensureNativeControlsEnhanced();
+                            changeStrmProbeDisplay();
+                        }, 0);
 
                         Dashboard.hideLoadingMsg();
                     });
@@ -308,6 +316,98 @@
                     el.style.opacity = enabled ? '1' : '0.5';
                     el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
                 });
+            }
+
+            /* ===== 兜底：确定性增强 is= 控件 =====
+               插件页控件的升级依赖 webcomponents polyfill 的异步注册（CE v0），
+               存在竞态：页内最后的控件可能未被升级（裸原生控件，渲染与顶部区块不一致）。
+               以下步骤与官方 elements/emby-checkbox、elements/emby-input 的升级回调逐行对应，
+               幂等可重入：polyfill 已升级的会被 guard 跳过；polyfill 晚到时见到已有标记也会跳过。 */
+            function enhanceCheckbox(input) {
+                if (input.getAttribute('data-embycheckbox') === 'true') {
+                    return;
+                }
+
+                input.setAttribute('data-embycheckbox', 'true');
+                input.classList.add('emby-checkbox');
+
+                let labelElement = input.parentNode;
+                if (!labelElement) {
+                    return;
+                }
+                labelElement.classList.add('emby-checkbox-label');
+
+                let labelTextElement = labelElement.querySelector('span');
+
+                let outlineClass = 'checkboxOutline';
+                let customClass = input.getAttribute('data-outlineclass');
+                if (customClass) {
+                    outlineClass += ' ' + customClass;
+                }
+
+                let checkedIcon = input.getAttribute('data-checkedicon') || 'check';
+                let uncheckedIcon = input.getAttribute('data-uncheckedicon') || '';
+                let checkHtml = '<span class="material-icons checkboxIcon checkboxIcon-checked ' + checkedIcon + '" aria-hidden="true"></span>';
+                let uncheckedHtml = '<span class="material-icons checkboxIcon checkboxIcon-unchecked ' + uncheckedIcon + '" aria-hidden="true"></span>';
+                labelElement.insertAdjacentHTML('beforeend', '<span class="' + outlineClass + '">' + checkHtml + uncheckedHtml + '</span>');
+
+                if (labelTextElement) {
+                    labelTextElement.classList.add('checkboxLabel');
+                }
+
+                // 对齐官方 onKeyDown：回车不提交表单，改为切换勾选
+                input.addEventListener('keydown', function (e) {
+                    if (e.keyCode === 13) {
+                        e.preventDefault();
+                        input.checked = !input.checked;
+                        input.dispatchEvent(new CustomEvent('change', { bubbles: true }));
+                        return false;
+                    }
+                });
+            }
+
+            function enhanceInput(input) {
+                if (input.classList.contains('emby-input')) {
+                    return;
+                }
+
+                input.classList.add('emby-input');
+
+                // 对齐官方 createdCallback：基于 label 属性创建并前置 label 元素
+                // （页面手写的 label 与官方行为并存，已升级的顶部控件同样如此）
+                let label = document.createElement('label');
+                label.innerText = input.getAttribute('label') || '';
+                label.classList.add('inputLabel');
+                label.classList.add('inputLabelUnfocused');
+                label.htmlFor = input.id;
+                input.parentNode.insertBefore(label, input);
+
+                let syncLabel = function () {
+                    if (input.value) {
+                        label.classList.remove('inputLabel-float');
+                    } else {
+                        label.classList.add('inputLabel-float');
+                    }
+                };
+
+                input.addEventListener('focus', function () {
+                    syncLabel();
+                    label.classList.add('inputLabelFocused');
+                    label.classList.remove('inputLabelUnfocused');
+                });
+                input.addEventListener('blur', function () {
+                    syncLabel();
+                    label.classList.remove('inputLabelFocused');
+                    label.classList.add('inputLabelUnfocused');
+                });
+                input.addEventListener('change', syncLabel);
+                input.addEventListener('input', syncLabel);
+                input.addEventListener('valueset', syncLabel);
+            }
+
+            function ensureNativeControlsEnhanced() {
+                document.querySelectorAll('#TemplateConfigPage input[is="emby-checkbox"]').forEach(enhanceCheckbox);
+                document.querySelectorAll('#TemplateConfigPage input[is="emby-input"]').forEach(enhanceInput);
             }
 
 
