@@ -254,8 +254,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         var requested = args.TryGetValue("mediaSourceId", out var mediaSourceValue)
             ? mediaSourceValue?.ToString()
             : null;
-        var key = StrmProbeCacheKey.Compute(strmUrl!, fileSize, signature);
-        var virtualId = StrmVirtualSourceFactory.DeriveStableId(key);
+        var virtualId = DeriveStableId(ComputeKey(strmUrl!, fileSize, signature));
         if (!MediaSourceIdMatches(requested, itemId, virtualId))
         {
             return null;
@@ -284,6 +283,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
 
     /// <summary>
     /// mediaSourceId 是否为本条目的原生 Id 或虚拟 Guid（大小写/连字符不敏感）。
+    /// 虚拟源已随直跳下线，此处保留对历史虚拟 Id 的识别仅为升级过渡期兼容（避免在途会话取流 400）。
     /// </summary>
     internal static bool MediaSourceIdMatches(string? requested, Guid itemId, string virtualIdN)
     {
@@ -324,6 +324,36 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         var trimmed = url.Trim();
         return trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 计算缓存 key（SHA256 十六进制小写，url+size+sig 三要素，与历史虚拟源派生口径一致）。
+    /// </summary>
+    internal static string ComputeKey(string url, long fileSize, string signature)
+    {
+        var normalizedUrl = (url ?? string.Empty).Trim();
+        var normalizedSig = (signature ?? string.Empty).Trim();
+        var raw = normalizedUrl + "\n" + fileSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n" + normalizedSig;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(raw);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        var sb = new System.Text.StringBuilder(hash.Length * 2);
+        foreach (var b in hash)
+        {
+            sb.Append(b.ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 由缓存 key 派生确定性 Guid 形式 Id（MD5→"N" 32 位，与历史虚拟源口径一致，
+    /// 保证升级过渡期在途会话持有的旧虚拟 Id 仍可被识别）。
+    /// </summary>
+    internal static string DeriveStableId(string key)
+    {
+        using var md5 = System.Security.Cryptography.MD5.Create();
+        var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(key ?? string.Empty));
+        return new Guid(hash).ToString("N");
     }
 
     internal static bool HasTranscodeArgs(IDictionary<string, object?> args)
