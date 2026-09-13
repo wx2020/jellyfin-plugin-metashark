@@ -532,10 +532,11 @@ namespace Jellyfin.Plugin.MetaShark.Test
 
             await service.DelayedTrueProbeAsync(id, CancellationToken.None);
 
-            Assert.AreEqual(1, calls.Count);
+            Assert.AreEqual(2, calls.Count);
             Assert.AreEqual(StrmProbeConstants.LibraryRefreshDebounce, calls[0].Delay);
-            Assert.IsTrue(calls[0].Refreshed);
-            Assert.IsTrue(calls[0].ProbeEnabled);
+            Assert.IsFalse(calls[0].Refreshed);
+            Assert.IsTrue(calls[1].Refreshed);
+            Assert.IsTrue(calls[1].ProbeEnabled);
         }
 
         [TestMethod]
