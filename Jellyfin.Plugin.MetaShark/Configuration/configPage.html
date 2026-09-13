@@ -233,6 +233,14 @@
                             </label>
                             <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存；默认关闭。会产生网盘探测流量，高峰期谨慎开启</div>
                         </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
+                            <label class="emby-checkbox-label" for="EnableStrmDirectRedirect">
+                                <input id="EnableStrmDirectRedirect" name="EnableStrmDirectRedirect"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>取流 302 直跳</span>
+                            </label>
+                            <div class="fieldDescription">白名单第三方客户端的纯静态取流直接 302 到网盘直链，手机直连网盘、服务端不再代理字节；默认关闭。转码/混流请求不受影响，部分播放器可能不跟随跳转，开启后请用真机验证</div>
+                        </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                         <span>Save</span>
@@ -282,6 +290,7 @@
                         document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked = config.EnableStrmProbeDirectOnCacheMiss !== false;
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
                         document.querySelector('#EnableStrmProbeLibraryRefresh').checked = config.EnableStrmProbeLibraryRefresh === true;
+                        document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
 
                         changeProxyDisplay();
                         checkDoubanLogin();
@@ -329,6 +338,7 @@
                         config.EnableStrmProbeDirectOnCacheMiss = document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked;
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;
                         config.EnableStrmProbeLibraryRefresh = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
+                        config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
 

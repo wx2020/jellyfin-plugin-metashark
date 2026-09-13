@@ -6,6 +6,7 @@ using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -52,6 +53,9 @@ namespace Jellyfin.Plugin.MetaShark
                     ctx.GetRequiredService<ILogger<HttpStrmProber>>());
             });
             serviceCollection.AddSingleton<IMediaSourceProvider, StrmProbeMediaSourceProvider>();
+            // 取流 302 直跳：全局 ActionFilter（鉴权之后执行），只劫白名单客户端的纯静态取流，其余全部放行。
+            serviceCollection.AddTransient<StrmDirectRedirectFilter>();
+            serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<StrmDirectRedirectFilter>());
             serviceCollection.AddSingleton<IMediaInfoProbeCacheStore>((ctx) =>
             {
                 var appPaths = ctx.GetRequiredService<IApplicationPaths>();
