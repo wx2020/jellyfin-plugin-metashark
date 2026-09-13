@@ -67,6 +67,20 @@ public sealed class StrmProbeMediaSourceProvider : IMediaSourceProvider
             cacheHit: false);
         if (!preDecision.ShouldReadCache)
         {
+            // 取流补身份：PlaybackInfo 带身份放行后，切源取流可能是纯 api_key
+            //（无鉴权头/DeviceId）。此时按取流请求的 mediaSourceId 回查，
+            // 能说出虚拟 Guid 即证明见过双源，直接按缓存 key 放行。
+            var streamFallback = StrmStreamFallback.TryResolve(
+                _httpContextAccessor.HttpContext?.Request,
+                item,
+                _store,
+                DateTime.UtcNow);
+            if (streamFallback != null)
+            {
+                _logger.LogInformation("strm 虚拟直连放行（取流补身份） item={Item}", item.Name);
+                return Task.FromResult<IEnumerable<MediaSourceInfo>>(new[] { streamFallback });
+            }
+
             _logger.LogDebug("strm 虚拟直连跳过 client={Client} item={Item}（原生行为）", clientName ?? "<unknown>", item.Name);
             return Task.FromResult<IEnumerable<MediaSourceInfo>>(Array.Empty<MediaSourceInfo>());
         }

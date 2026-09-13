@@ -56,7 +56,7 @@ public static class StrmVirtualSourceFactory
     /// </summary>
     /// <param name="key">缓存 key。</param>
     /// <returns>32 位无连字符的 Guid 字符串。</returns>
-    private static string DeriveStableId(string key)
+    internal static string DeriveStableId(string key)
     {
         using var md5 = MD5.Create();
         var hash = md5.ComputeHash(Encoding.UTF8.GetBytes(key));
