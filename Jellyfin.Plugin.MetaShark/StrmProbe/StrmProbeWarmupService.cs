@@ -128,11 +128,32 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
                 return;
             }
 
-            if (itemId == Guid.Empty)
-            {
-                return;
-            }
+            await ProbeNowAsync(itemId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "strm 入库媒体探测失败 itemId={ItemId}", itemId);
+        }
+    }
 
+    /// <summary>
+    /// 立即真探：按 Id 重新解析条目并做一次带远程探测的刷新（受并发闸门限制）。
+    /// 失败只记日志，不抛异常；调用方负责检查开关。供延迟入库真探与每日定时任务复用。
+    /// </summary>
+    /// <param name="itemId">条目 Id。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    internal async Task ProbeNowAsync(Guid itemId, CancellationToken cancellationToken)
+    {
+        if (itemId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
             var item = _libraryManager.GetItemById(itemId);
             if (item == null || !StrmFileHelper.IsStrmPath(item.Path))
             {
@@ -142,7 +163,7 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
             var entered = await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false);
             if (!entered)
             {
-                _logger.LogDebug("strm 入库真探并发已满，跳过 item={Item}", item.Name);
+                _logger.LogDebug("strm 入库媒体探测并发已满，跳过 item={Item}", item.Name);
                 return;
             }
 
@@ -155,7 +176,7 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
                     EnableRemoteContentProbe = true,
                 };
                 await RefreshItemAsync(item, options, cancellationToken).ConfigureAwait(false);
-                _logger.LogInformation("strm 入库真探完成 item={Item}", item.Name);
+                _logger.LogInformation("strm 入库媒体探测完成 item={Item}", item.Name);
             }
             finally
             {
@@ -164,10 +185,11 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
         }
         catch (OperationCanceledException)
         {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "strm 入库真探失败 itemId={ItemId}", itemId);
+            _logger.LogWarning(ex, "strm 入库媒体探测失败 itemId={ItemId}", itemId);
         }
     }
 }

@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.MetaShark.ScheduledTasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Tasks;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -267,6 +271,112 @@ namespace Jellyfin.Plugin.MetaShark.Test
             await service2.DelayedTrueProbeAsync(id2, CancellationToken.None);
 
             Assert.AreEqual(0, calls.FindAll(c => c.Refreshed).Count);
+        }
+
+        // ---------- daily task (每日定时探测) ----------
+
+        [TestMethod]
+        [DataRow("03:00", 3, 0)]
+        [DataRow("23:59", 23, 59)]
+        [DataRow("00:00", 0, 0)]
+        public void DailyTrigger_ValidTime_Parses(string input, int h, int m)
+        {
+            var trigger = StrmMediaProbeDailyTask.BuildDailyTrigger(input);
+            Assert.IsNotNull(trigger);
+            Assert.AreEqual(TaskTriggerInfoType.DailyTrigger, trigger.Type);
+            Assert.AreEqual(new TimeSpan(h, m, 0).Ticks, trigger.TimeOfDayTicks);
+        }
+
+        [TestMethod]
+        [DataRow(null)]
+        [DataRow("")]
+        [DataRow("   ")]
+        [DataRow("24:00")]
+        [DataRow("ab:cd")]
+        [DataRow("3:00")]
+        public void DailyTrigger_InvalidOrEmpty_ReturnsNull(string? input)
+        {
+            Assert.IsNull(StrmMediaProbeDailyTask.BuildDailyTrigger(input));
+        }
+
+        [TestMethod]
+        public void NeedsVideoProbe_MissingOrNoVideo_ReturnsTrue()
+        {
+            Assert.IsTrue(StrmMediaProbeDailyTask.NeedsVideoProbe(null));
+            Assert.IsTrue(StrmMediaProbeDailyTask.NeedsVideoProbe(new MediaStream[0]));
+            Assert.IsTrue(StrmMediaProbeDailyTask.NeedsVideoProbe(new[]
+            {
+                new MediaStream { Type = MediaStreamType.Audio },
+                new MediaStream { Type = MediaStreamType.Subtitle },
+            }));
+        }
+
+        [TestMethod]
+        public void NeedsVideoProbe_WithVideo_ReturnsFalse()
+        {
+            Assert.IsFalse(StrmMediaProbeDailyTask.NeedsVideoProbe(new[]
+            {
+                new MediaStream { Type = MediaStreamType.Video },
+                new MediaStream { Type = MediaStreamType.Audio },
+            }));
+        }
+
+        private static StrmMediaProbeDailyTask NewDailyTask(
+            MediaBrowser.Controller.Library.ILibraryManager lib,
+            Mock<MediaBrowser.Controller.Library.IMediaSourceManager> msm,
+            StrmProbeWarmupService warmup)
+        {
+            return new StrmMediaProbeDailyTask(
+                lib,
+                msm.Object,
+                warmup,
+                new TestGenericLogger<StrmMediaProbeDailyTask>());
+        }
+
+        [TestMethod]
+        public async Task DailyTask_ProbeDisabled_Skips_All()
+        {
+            var id = Guid.NewGuid();
+            var movie = NewStrmMovie(id, "/strm/d.strm");
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<MediaBrowser.Controller.Entities.InternalItemsQuery>()))
+                .Returns(new List<MediaBrowser.Controller.Entities.BaseItem> { movie });
+            var msm = new Mock<MediaBrowser.Controller.Library.IMediaSourceManager>();
+            msm.Setup(m => m.GetMediaStreams(It.IsAny<Guid>())).Returns(new MediaStream[0]);
+
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var warmup = NewTrueProbeService(lib.Object, calls);
+            warmup.TestConfigOverride = false;
+            var task = NewDailyTask(lib.Object, msm, warmup);
+
+            var progress = new Progress<double>();
+            await task.ExecuteAsync(progress, CancellationToken.None);
+
+            Assert.AreEqual(0, calls.FindAll(c => c.Refreshed).Count);
+        }
+
+        [TestMethod]
+        public async Task DailyTask_Enabled_Refreshes_Only_Strm_Without_Video()
+        {
+            var strmNoVideo = NewStrmMovie(Guid.NewGuid(), "/strm/e.strm");
+            var strmWithVideo = NewStrmMovie(Guid.NewGuid(), "/strm/f.strm");
+            var plainFile = NewStrmMovie(Guid.NewGuid(), "/media/plain.mkv");
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<MediaBrowser.Controller.Entities.InternalItemsQuery>()))
+                .Returns(new List<MediaBrowser.Controller.Entities.BaseItem> { strmNoVideo, strmWithVideo, plainFile });
+            lib.Setup(l => l.GetItemById(strmNoVideo.Id)).Returns(strmNoVideo);
+            var msm = new Mock<MediaBrowser.Controller.Library.IMediaSourceManager>();
+            msm.Setup(m => m.GetMediaStreams(strmNoVideo.Id)).Returns(new MediaStream[0]);
+            msm.Setup(m => m.GetMediaStreams(strmWithVideo.Id)).Returns(new[] { new MediaStream { Type = MediaStreamType.Video } });
+            msm.Setup(m => m.GetMediaStreams(plainFile.Id)).Returns(new MediaStream[0]);
+
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var warmup = NewTrueProbeService(lib.Object, calls);
+            var task = NewDailyTask(lib.Object, msm, warmup);
+
+            await task.ExecuteAsync(new Progress<double>(), CancellationToken.None);
+
+            Assert.AreEqual(1, calls.FindAll(c => c.Refreshed).Count);
         }
 
         [TestMethod]

@@ -1,10 +1,12 @@
 using System.IO;
 using Jellyfin.Plugin.MetaShark.Api;
+using Jellyfin.Plugin.MetaShark.ScheduledTasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Model.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,6 +21,7 @@ namespace Jellyfin.Plugin.MetaShark
         {
             serviceCollection.AddHttpContextAccessor();
             serviceCollection.AddHostedService<BoxSetManager>();
+            serviceCollection.AddSingleton<IScheduledTask, StrmMediaProbeDailyTask>();
             serviceCollection.AddSingleton((ctx) =>
             {
                 return new DoubanApi(ctx.GetRequiredService<ILoggerFactory>());

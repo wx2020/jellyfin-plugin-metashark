@@ -112,9 +112,15 @@ public class PluginConfiguration : BasePluginConfiguration
     public string StrmProbeClientWhitelist { get; set; } = "Yamby";
 
     /// <summary>
-    /// 入库真探：新增 strm 入库去抖后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存。默认关闭。与取流 302 直跳相互独立。
+    /// 入库媒体探测：新增 strm 入库去抖后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存。默认关闭。与取流 302 直跳相互独立。
+    /// 同时是"每日扫描缺失流信息"定时任务的执行开关。
     /// </summary>
     public bool EnableStrmProbeLibraryRefresh { get; set; } = false;
+
+    /// <summary>
+    /// 每日定时探测时间（HH:mm，24 小时制）。留空则每日任务不自动执行（仍可手动运行）。修改后需重启生效。
+    /// </summary>
+    public string StrmProbeDailyScanTime { get; set; } = string.Empty;
 
     /// <summary>
     /// 取流 302 直跳：白名单第三方客户端的纯静态取流（/Videos/…/stream.mkv?Static=true）直接 302
