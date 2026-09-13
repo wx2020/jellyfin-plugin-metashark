@@ -193,7 +193,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         string? method,
         string? controllerName,
         string? actionName,
-        IReadOnlyDictionary<string, object?> args,
+        IDictionary<string, object?> args,
         string? clientName,
         IReadOnlyList<string> whitelist,
         bool masterEnabled,
@@ -321,7 +321,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
             || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static bool HasTranscodeArgs(IReadOnlyDictionary<string, object?> args)
+    internal static bool HasTranscodeArgs(IDictionary<string, object?> args)
     {
         foreach (var name in TranscodeVetoArgs)
         {
@@ -350,7 +350,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         return false;
     }
 
-    private static bool TryGetItemId(IReadOnlyDictionary<string, object?> args, out Guid itemId)
+    private static bool TryGetItemId(IDictionary<string, object?> args, out Guid itemId)
     {
         itemId = Guid.Empty;
         if (args == null || !args.TryGetValue("itemId", out var value) || value == null)
