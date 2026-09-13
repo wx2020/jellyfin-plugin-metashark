@@ -194,6 +194,21 @@ namespace Jellyfin.Plugin.MetaShark.Test
         }
 
         [TestMethod]
+        public void GetClaim_FromClaimsPrincipal_Normalizes()
+        {
+            var identity = new System.Security.Claims.ClaimsIdentity("TestAuth");
+            identity.AddClaim(new System.Security.Claims.Claim("Jellyfin-Client", "  Lenna  "));
+            identity.AddClaim(new System.Security.Claims.Claim("Jellyfin-UserId", ItemId.ToString("N")));
+            var principal = new System.Security.Claims.ClaimsPrincipal(identity);
+
+            Assert.AreEqual("Lenna", StrmDirectRedirectFilter.GetClaim(principal, "Jellyfin-Client"));
+            Assert.AreEqual(ItemId.ToString("N"), StrmDirectRedirectFilter.GetClaim(principal, "Jellyfin-UserId"));
+            Assert.IsNull(StrmDirectRedirectFilter.GetClaim(principal, "Jellyfin-DeviceId"));
+            Assert.IsNull(StrmDirectRedirectFilter.GetClaim(new System.Security.Claims.ClaimsPrincipal(), "Jellyfin-Client"));
+            Assert.IsNull(StrmDirectRedirectFilter.GetClaim(null, "Jellyfin-Client"));
+        }
+
+        [TestMethod]
         public void Decide_HeadMethod_Redirects()
         {
             var decision = StrmDirectRedirectFilter.Decide(
