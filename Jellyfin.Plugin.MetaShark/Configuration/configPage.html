@@ -187,21 +187,19 @@
                             </label>
                             <div class="fieldDescription">关闭时整个加速链路（缓存读取、虚拟直连、后台预热）全部停用，所有客户端走原生行为</div>
                         </div>
-                        <div id="StrmProbeChildren" class="strmprobe-children">
-                            <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
-                                <label class="emby-checkbox-label" for="EnableStrmProbeDirectOnCacheMiss">
-                                    <input id="EnableStrmProbeDirectOnCacheMiss" name="EnableStrmProbeDirectOnCacheMiss"
-                                        type="checkbox" is="emby-checkbox" />
-                                    <span>无缓存时返回直链</span>
-                                </label>
-                                <div class="fieldDescription">仅白名单第三方客户端生效；关闭时缓存未命中走原生行为（仍会后台预热写缓存供下次命中）</div>
-                            </div>
-                            <div class="inputContainer strmprobe-child">
-                                <label class="inputLabel inputLabelUnfocused" for="StrmProbeClientWhitelist">第三方客户端名单</label>
-                                <input id="StrmProbeClientWhitelist" name="StrmProbeClientWhitelist" type="text"
-                                    is="emby-input" placeholder="Yamby" />
-                                <div class="fieldDescription">逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端一律走原生行为</div>
-                            </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
+                            <label class="emby-checkbox-label" for="EnableStrmProbeDirectOnCacheMiss">
+                                <input id="EnableStrmProbeDirectOnCacheMiss" name="EnableStrmProbeDirectOnCacheMiss"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>无缓存时返回直链</span>
+                            </label>
+                            <div class="fieldDescription">仅白名单第三方客户端生效；关闭时缓存未命中走原生行为（仍会后台预热写缓存供下次命中）</div>
+                        </div>
+                        <div class="inputContainer strmprobe-child">
+                            <label class="inputLabel inputLabelUnfocused" for="StrmProbeClientWhitelist">第三方客户端名单</label>
+                            <input id="StrmProbeClientWhitelist" name="StrmProbeClientWhitelist" type="text"
+                                is="emby-input" placeholder="Yamby" />
+                            <div class="fieldDescription">逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端一律走原生行为</div>
                         </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -306,21 +304,11 @@
 
             function changeStrmProbeDisplay() {
                 let enabled = document.querySelector('#EnableStrmProbeWarmup').checked;
-                let wrapper = document.querySelector('#StrmProbeChildren');
-                if (wrapper) {
-                    wrapper.style.opacity = enabled ? '1' : '0.5';
-                }
                 document.querySelectorAll('.strmprobe-child').forEach(function (el) {
+                    el.style.opacity = enabled ? '1' : '0.5';
                     el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
                 });
             }
-
-            /* 子开关缩进：与 Jellyfin 原生嵌套选项一致的视觉层级 */
-            (function () {
-                let style = document.createElement('style');
-                style.textContent = '#StrmProbeChildren{margin-left:1.8em;padding-left:1em;border-left:2px solid rgba(255,255,255,.12)}';
-                document.head.appendChild(style);
-            })();
 
 
             function changeProxyDisplay() {
