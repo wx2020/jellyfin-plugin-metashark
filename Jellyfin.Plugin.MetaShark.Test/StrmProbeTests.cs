@@ -682,5 +682,196 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.IsNull(StrmClientResolver.Resolve(null, null));
             Assert.IsTrue(StrmClientPolicy.IsNativeClient(StrmClientResolver.Resolve(null, null)));
         }
+
+        // ---------- stream fallback (取流补身份) ----------
+
+        private static (string Dir, string StrmPath, string Key) NewStrmFileWithKey(string url)
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "metashark-streamfb-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var strm = Path.Combine(dir, "movie.strm");
+            File.WriteAllText(strm, url + "\n");
+            Assert.IsTrue(StrmFileHelper.TryReadStrmLink(strm, out var u, out var size, out var sig));
+            return (dir, strm, StrmProbeCacheKey.Compute(u, size, sig));
+        }
+
+        private static void SeedHit(FakeStore store, string key, string url)
+        {
+            var now = DateTime.UtcNow;
+            store.Set(new StrmProbeCacheEntry
+            {
+                Key = key,
+                Url = url,
+                FileSize = 10,
+                Signature = "1",
+                DirectUrl = "https://cdn.example.com/x.mkv",
+                ContentType = "video/x-matroska",
+                ContentLength = 999,
+                ProbedAtUtc = now,
+                ExpiresAtUtc = now.AddHours(1),
+            });
+        }
+
+        private static DefaultHttpContext NewStreamContext(string path, string? mediaSourceId)
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.Path = path;
+            if (mediaSourceId != null)
+            {
+                ctx.Request.QueryString = QueryString.Create("mediaSourceId", mediaSourceId);
+            }
+
+            return ctx;
+        }
+
+        [TestMethod]
+        public void StreamFallback_Hit_WithMatchingId_ReturnsVirtual_WithoutClientIdentity()
+        {
+            var (dir, strm, key) = NewStrmFileWithKey("https://pan.example.com/f/stream1");
+            try
+            {
+                var store = new FakeStore();
+                SeedHit(store, key, "https://pan.example.com/f/stream1");
+                var virtualId = StrmVirtualSourceFactory.DeriveStableId(key);
+
+                // 纯 api_key 取流：无 Items、无鉴权头、无查询串身份
+                var ctx = NewStreamContext("/Videos/c9e3b155d11a63e35949d45d0decd90c/stream.mkv", virtualId);
+                var movie = NewStrmMovie(Guid.NewGuid(), strm);
+
+                var src = StrmStreamFallback.TryResolve(ctx.Request, movie, store, DateTime.UtcNow);
+
+                Assert.IsNotNull(src);
+                Assert.AreEqual(virtualId, src!.Id);
+                Assert.AreEqual("https://pan.example.com/f/stream1", src.Path);
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+
+        [TestMethod]
+        public void StreamFallback_WrongId_ReturnsNull()
+        {
+            var (dir, strm, key) = NewStrmFileWithKey("https://pan.example.com/f/stream2");
+            try
+            {
+                var store = new FakeStore();
+                SeedHit(store, key, "https://pan.example.com/f/stream2");
+
+                // 原生 itemId（带连字符 Guid）必然与派生虚拟 Id 不同
+                var ctx = NewStreamContext("/Videos/c9e3b155d11a63e35949d45d0decd90c/stream.mkv", "c9e3b155d11a63e35949d45d0decd90c");
+                var movie = NewStrmMovie(Guid.NewGuid(), strm);
+
+                Assert.IsNull(StrmStreamFallback.TryResolve(ctx.Request, movie, store, DateTime.UtcNow));
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+
+        [TestMethod]
+        public void StreamFallback_CacheMiss_ReturnsNull_WithoutWarmup()
+        {
+            var (dir, strm, key) = NewStrmFileWithKey("https://pan.example.com/f/stream3");
+            try
+            {
+                // 故意不写缓存：取流路径只读，未命中走原生回退，不触发后台探针
+                var store = new FakeStore();
+                var virtualId = StrmVirtualSourceFactory.DeriveStableId(key);
+                var ctx = NewStreamContext("/Videos/c9e3b155d11a63e35949d45d0decd90c/stream.mkv", virtualId);
+                var movie = NewStrmMovie(Guid.NewGuid(), strm);
+
+                Assert.IsNull(StrmStreamFallback.TryResolve(ctx.Request, movie, store, DateTime.UtcNow));
+                Assert.AreEqual(0, store.Count);
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+
+        [TestMethod]
+        public void StreamFallback_NonVideosPath_ReturnsNull()
+        {
+            var (dir, strm, key) = NewStrmFileWithKey("https://pan.example.com/f/stream4");
+            try
+            {
+                var store = new FakeStore();
+                SeedHit(store, key, "https://pan.example.com/f/stream4");
+                var virtualId = StrmVirtualSourceFactory.DeriveStableId(key);
+
+                // PlaybackInfo 路径不受此兜底影响（仍走白名单门控）
+                var ctx = NewStreamContext("/Items/c9e3b155d11a63e35949d45d0decd90c/PlaybackInfo", virtualId);
+                var movie = NewStrmMovie(Guid.NewGuid(), strm);
+
+                Assert.IsNull(StrmStreamFallback.TryResolve(ctx.Request, movie, store, DateTime.UtcNow));
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+
+        [TestMethod]
+        public void StreamFallback_MissingQuery_Or_NonStrm_ReturnsNull()
+        {
+            var (dir, strm, key) = NewStrmFileWithKey("https://pan.example.com/f/stream5");
+            try
+            {
+                var store = new FakeStore();
+                SeedHit(store, key, "https://pan.example.com/f/stream5");
+                var movie = NewStrmMovie(Guid.NewGuid(), strm);
+
+                // 缺 mediaSourceId 查询参数
+                var noQuery = NewStreamContext("/Videos/c9e3b155d11a63e35949d45d0decd90c/stream.mkv", null);
+                Assert.IsNull(StrmStreamFallback.TryResolve(noQuery.Request, movie, store, DateTime.UtcNow));
+
+                // 非 strm 条目
+                var plain = NewStrmMovie(Guid.NewGuid(), "/media/plain.mkv");
+                var withId = NewStreamContext(
+                    "/Videos/c9e3b155d11a63e35949d45d0decd90c/stream.mkv",
+                    StrmVirtualSourceFactory.DeriveStableId(key));
+                Assert.IsNull(StrmStreamFallback.TryResolve(withId.Request, plain, store, DateTime.UtcNow));
+
+                // 空请求
+                Assert.IsNull(StrmStreamFallback.TryResolve(null, movie, store, DateTime.UtcNow));
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
     }
 }
