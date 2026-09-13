@@ -449,7 +449,8 @@ namespace Jellyfin.Plugin.MetaShark.Test
         public void VirtualSource_Is_Additive_Remote_Http_Without_Opening()
         {
             var src = StrmVirtualSourceFactory.Build(new string('a', 64), "https://cdn.example.com/movie.mp4", 12345, "video/mp4");
-            Assert.IsTrue(src.Id.StartsWith(StrmProbeConstants.VirtualSourceIdPrefix, StringComparison.Ordinal));
+            // Id 必须是纯 Guid（"N" 格式）：服务端混流/转码路径会 Guid.Parse(mediaSourceId)
+            Assert.IsTrue(Guid.TryParseExact(src.Id, "N", out _));
             Assert.AreEqual(MediaProtocol.Http, src.Protocol);
             Assert.IsTrue(src.IsRemote);
             Assert.IsFalse(src.RequiresOpening);
@@ -457,6 +458,28 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.IsTrue(src.SupportsDirectPlay);
             Assert.AreEqual("https://cdn.example.com/movie.mp4", src.Path);
             Assert.AreEqual("mp4", src.Container);
+        }
+
+        [TestMethod]
+        public void VirtualSource_Id_Is_Deterministic_And_Key_Derived()
+        {
+            var key = new string('a', 64);
+            var a = StrmVirtualSourceFactory.Build(key, "https://pan.example.com/a.mkv?sign=abc", null, null);
+            var b = StrmVirtualSourceFactory.Build(key, "https://pan.example.com/a.mkv?sign=abc", null, null);
+            var c = StrmVirtualSourceFactory.Build(new string('b', 64), "https://pan.example.com/a.mkv?sign=abc", null, null);
+
+            Assert.AreEqual(a.Id, b.Id);
+            Assert.AreNotEqual(a.Id, c.Id);
+            Assert.AreEqual(key, a.ETag);
+
+            // 容器从扩展名解析需容忍 query 串
+            Assert.AreEqual("mkv", a.Container);
+        }
+
+        [TestMethod]
+        public void VirtualSource_Build_Rejects_Empty_Url()
+        {
+            Assert.ThrowsException<ArgumentException>(() => StrmVirtualSourceFactory.Build("k", " ", null, null));
         }
 
         // ---------- client resolver (AuthorizationInfo 优先) ----------

@@ -90,8 +90,11 @@ public sealed class StrmProbeMediaSourceProvider : IMediaSourceProvider
         switch (decision.Kind)
         {
             case StrmPlaybackDecisionKind.VirtualCached:
+                // 命中分支同样发 openlist 原始签址（Url 列）：openlist 永久 sign 长期有效，
+                // 探针解析出的存储直链（DirectUrl）多由存储驱动按请求构造、必然过期，不作下发。
+                // 探针产出的 ContentLength/ContentType 是文件级事实，继续用于补全元数据。
                 _logger.LogInformation("strm 虚拟直连放行（缓存命中） client={Client} item={Item}", clientName, item.Name);
-                return Task.FromResult<IEnumerable<MediaSourceInfo>>(new[] { StrmVirtualSourceFactory.Build(key, cached!.DirectUrl, cached.ContentLength, cached.ContentType) });
+                return Task.FromResult<IEnumerable<MediaSourceInfo>>(new[] { StrmVirtualSourceFactory.Build(key, cached!.Url, cached.ContentLength, cached.ContentType) });
             case StrmPlaybackDecisionKind.VirtualUnprobed:
                 _logger.LogInformation("strm 虚拟直连放行（无缓存，返回原始直链并后台重探） client={Client} item={Item}", clientName, item.Name);
                 EnqueueBackgroundProbe(url, fileSize, signature, key);

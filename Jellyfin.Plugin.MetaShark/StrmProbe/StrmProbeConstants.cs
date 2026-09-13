@@ -13,9 +13,6 @@ public static class StrmProbeConstants
     /// <summary>缓存默认有效期（7 天）。过期视为未命中并自动重探。</summary>
     public static readonly TimeSpan DefaultTtl = TimeSpan.FromDays(7);
 
-    /// <summary>虚拟直连 MediaSource Id 前缀。</summary>
-    public const string VirtualSourceIdPrefix = "metashark-strm-direct-";
-
     /// <summary>后台预热最大并发数（避免打满网盘站）。</summary>
     public const int MaxConcurrentWarmups = 2;
 }
