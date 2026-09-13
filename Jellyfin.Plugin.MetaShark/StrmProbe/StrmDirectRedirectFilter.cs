@@ -179,7 +179,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
     /// </summary>
     /// <param name="method">HTTP 方法。</param>
     /// <param name="controllerName">控制器名（如 Videos）。</param>
-    /// <param name="actionName">Action 名（如 GetVideoStream）。</param>
+    /// <param name="actionName">Action 名（GetVideoStream 或 GetVideoStreamByContainer，后者对应 /stream.mkv 这类带容器后缀的路由）。</param>
     /// <param name="args">已绑定的 Action 参数。</param>
     /// <param name="clientName">客户端名称（可为空，未知按原生处理）。</param>
     /// <param name="whitelist">已解析白名单。</param>
@@ -214,7 +214,8 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         }
 
         if (!string.Equals(controllerName, "Videos", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(actionName, "GetVideoStream", StringComparison.OrdinalIgnoreCase))
+            || (!string.Equals(actionName, "GetVideoStream", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(actionName, "GetVideoStreamByContainer", StringComparison.OrdinalIgnoreCase)))
         {
             return null;
         }
