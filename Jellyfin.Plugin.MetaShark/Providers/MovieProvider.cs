@@ -25,8 +25,8 @@ namespace Jellyfin.Plugin.MetaShark.Providers
 {
     public class MovieProvider : BaseProvider, IRemoteMetadataProvider<Movie, MovieInfo>
     {
-        public MovieProvider(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ILibraryManager libraryManager, IHttpContextAccessor httpContextAccessor, DoubanApi doubanApi, TmdbApi tmdbApi, OmdbApi omdbApi, ImdbApi imdbApi)
-            : base(httpClientFactory, loggerFactory.CreateLogger<MovieProvider>(), libraryManager, httpContextAccessor, doubanApi, tmdbApi, omdbApi, imdbApi)
+        public MovieProvider(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ILibraryManager libraryManager, IHttpContextAccessor httpContextAccessor, DoubanApi doubanApi, TmdbApi tmdbApi, OmdbApi omdbApi, ImdbApi imdbApi, MoviePilotApi? moviePilotApi = null)
+            : base(httpClientFactory, loggerFactory.CreateLogger<MovieProvider>(), libraryManager, httpContextAccessor, doubanApi, tmdbApi, omdbApi, imdbApi, moviePilotApi)
         {
         }
 
@@ -43,8 +43,11 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                 return result;
             }
 
-            // 从douban搜索
-            var res = await this._doubanApi.SearchMovieAsync(info.Name, cancellationToken).ConfigureAwait(false);
+            // MoviePilot 优先通道（M2 搜索），未命中或异常时回退豆瓣直连搜索
+            var mpSearch = await this.SearchMoviePilotAsync(info.Name, true, cancellationToken).ConfigureAwait(false);
+            var res = mpSearch.Count > 0
+                ? mpSearch
+                : await this._doubanApi.SearchMovieAsync(info.Name, cancellationToken).ConfigureAwait(false);
             result.AddRange(res.Take(Configuration.PluginConfiguration.MAX_SEARCH_RESULT).Select(x =>
             {
                 return new RemoteSearchResult
@@ -116,12 +119,20 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             if (metaSource != MetaSource.Tmdb && !string.IsNullOrEmpty(sid))
             {
                 this.Log($"GetMovieMetadata of douban [sid]: \"{sid}\"");
-                var subject = await this._doubanApi.GetMovieAsync(sid, cancellationToken).ConfigureAwait(false);
+                // MoviePilot 优先通道（M1/D1 详情 + D2 阵容），未命中时回退豆瓣直连
+                var subject = await this.GetMoviePilotSubjectAsync(sid, true, cancellationToken).ConfigureAwait(false);
                 if (subject == null)
                 {
-                    return result;
+                    subject = await this._doubanApi.GetMovieAsync(sid, cancellationToken).ConfigureAwait(false);
+                    if (subject == null)
+                    {
+                        return result;
+                    }
                 }
-                subject.Celebrities = await this._doubanApi.GetCelebritiesBySidAsync(sid, cancellationToken).ConfigureAwait(false);
+                if (subject.Celebrities == null || subject.Celebrities.Count == 0)
+                {
+                    subject.Celebrities = await this._doubanApi.GetCelebritiesBySidAsync(sid, cancellationToken).ConfigureAwait(false);
+                }
 
                 var movie = new Movie
                 {

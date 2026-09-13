@@ -177,6 +177,30 @@
                     </fieldset>
                     <fieldset class="verticalSection verticalSection-extrabottompadding">
                         <legend>
+                            <h3>MoviePilot 豆瓣数据优先通道</h3>
+                        </legend>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableMoviePilot">
+                                <input id="EnableMoviePilot" name="EnableMoviePilot" type="checkbox"
+                                    is="emby-checkbox" />
+                                <span>启用 MoviePilot 优先通道</span>
+                            </label>
+                            <div class="fieldDescription">勾选后，电影/电视剧刮削优先从 MoviePilot 获取豆瓣数据，失败时自动回退豆瓣直连。默认关闭，未配置时走原链路</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MoviePilotBaseUrl">MoviePilot 地址</label>
+                            <input id="MoviePilotBaseUrl" name="MoviePilotBaseUrl" type="text" is="emby-input"
+                                placeholder="http://192.168.5.10:3001" />
+                            <div class="fieldDescription">填写 MoviePilot 实例地址（不要带 /api 后缀）</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="MoviePilotApiToken">API_TOKEN</label>
+                            <input id="MoviePilotApiToken" name="MoviePilotApiToken" type="password" is="emby-input" />
+                            <div class="fieldDescription">在 MoviePilot 前端系统设置中查看，仅保存在本地配置中</div>
+                        </div>
+                    </fieldset>
+                    <fieldset class="verticalSection verticalSection-extrabottompadding">
+                        <legend>
                             <h3>网盘直链播放探针加速（strm）</h3>
                         </legend>
                         <div class="checkboxContainer checkboxContainer-withDescription">
@@ -242,6 +266,10 @@
                         document.querySelector('#TmdbProxyHost').value = config.TmdbProxyHost;
                         document.querySelector('#TmdbProxyPort').value = config.TmdbProxyPort;
 
+                        document.querySelector('#EnableMoviePilot').checked = config.EnableMoviePilot === true;
+                        document.querySelector('#MoviePilotBaseUrl').value = config.MoviePilotBaseUrl || '';
+                        document.querySelector('#MoviePilotApiToken').value = config.MoviePilotApiToken || '';
+
                         document.querySelector('#EnableStrmProbeWarmup').checked = config.EnableStrmProbeWarmup === true;
                         document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked = config.EnableStrmProbeDirectOnCacheMiss !== false;
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
@@ -285,6 +313,9 @@
                         config.TmdbProxyType = document.querySelector('#TmdbProxyType').value;
                         config.TmdbProxyHost = document.querySelector('#TmdbProxyHost').value;
                         config.TmdbProxyPort = document.querySelector('#TmdbProxyPort').value;
+                        config.EnableMoviePilot = document.querySelector('#EnableMoviePilot').checked;
+                        config.MoviePilotBaseUrl = document.querySelector('#MoviePilotBaseUrl').value;
+                        config.MoviePilotApiToken = document.querySelector('#MoviePilotApiToken').value;
                         config.EnableStrmProbeWarmup = document.querySelector('#EnableStrmProbeWarmup').checked;
                         config.EnableStrmProbeDirectOnCacheMiss = document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked;
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;

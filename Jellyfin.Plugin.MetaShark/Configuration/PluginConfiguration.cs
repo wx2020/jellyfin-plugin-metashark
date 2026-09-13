@@ -120,4 +120,19 @@ public class PluginConfiguration : BasePluginConfiguration
     /// 第三方客户端名单，逗号/分号/换行分隔，大小写不敏感。默认仅 Yamby。
     /// </summary>
     public string StrmProbeClientWhitelist { get; set; } = "Yamby";
+
+    /// <summary>
+    /// 启用 MoviePilot 豆瓣数据优先通道。关闭或未配置时走原有豆瓣直连链路。
+    /// </summary>
+    public bool EnableMoviePilot { get; set; } = false;
+
+    /// <summary>
+    /// MoviePilot 实例地址，如 http://192.168.5.10:3001。
+    /// </summary>
+    public string MoviePilotBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// MoviePilot API_TOKEN（管理员级 secret，仅保存在本地配置中，不要提交到仓库）。
+    /// </summary>
+    public string MoviePilotApiToken { get; set; } = string.Empty;
 }

@@ -35,6 +35,10 @@ namespace Jellyfin.Plugin.MetaShark
             {
                 return new ImdbApi(ctx.GetRequiredService<ILoggerFactory>());
             });
+            serviceCollection.AddSingleton((ctx) =>
+            {
+                return new MoviePilotApi(ctx.GetRequiredService<ILoggerFactory>());
+            });
             serviceCollection.AddSingleton<IStrmProbeCacheStore>((ctx) =>
             {
                 var appPaths = ctx.GetRequiredService<IApplicationPaths>();
