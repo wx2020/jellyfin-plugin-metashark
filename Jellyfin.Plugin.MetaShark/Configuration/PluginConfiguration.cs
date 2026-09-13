@@ -127,6 +127,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableStrmProbeLibraryRefresh { get; set; } = false;
 
     /// <summary>
+    /// 取流 302 直跳：白名单第三方客户端的纯静态取流（/Videos/…/stream.mkv?Static=true）直接 302
+    /// 到本地 .strm 文件首行的直链，手机直连网盘、服务端不再代理字节。默认关闭；转码/混流请求不受影响。
+    /// </summary>
+    public bool EnableStrmDirectRedirect { get; set; } = false;
+
+    /// <summary>
     /// 启用 MoviePilot 豆瓣数据优先通道。关闭或未配置时走原有豆瓣直连链路。
     /// </summary>
     public bool EnableMoviePilot { get; set; } = false;
