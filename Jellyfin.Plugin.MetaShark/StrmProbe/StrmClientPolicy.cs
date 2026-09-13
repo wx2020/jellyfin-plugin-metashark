@@ -6,50 +6,6 @@ using System.Text.RegularExpressions;
 namespace Jellyfin.Plugin.MetaShark.StrmProbe;
 
 /// <summary>
-/// 播放决策：虚拟直连放行 / 原生行为 / 后台预热。
-/// </summary>
-public enum StrmPlaybackDecisionKind
-{
-    /// <summary>走原生行为，不返回虚拟直连，不触发后台探针写缓存。</summary>
-    Native = 0,
-
-    /// <summary>返回缓存命中的虚拟直连。</summary>
-    VirtualCached = 1,
-
-    /// <summary>缓存未命中但放行虚拟直连（未探针的原始直链），同时后台预热写缓存。</summary>
-    VirtualUnprobed = 2,
-
-    /// <summary>走原生行为，但后台预热写缓存（供下次命中）。</summary>
-    NativeWithWarmup = 3,
-}
-
-/// <summary>
-/// 播放决策结果。
-/// </summary>
-public sealed class StrmPlaybackDecision
-{
-    /// <summary>
-    /// Gets or sets 决策类型。
-    /// </summary>
-    public StrmPlaybackDecisionKind Kind { get; set; }
-
-    /// <summary>
-    /// Gets or sets 是否应读取缓存。总开关关闭或原生客户端时为 false（加速链路整体停用）。
-    /// </summary>
-    public bool ShouldReadCache { get; set; }
-
-    /// <summary>
-    /// Gets or sets 是否返回虚拟直连 MediaSource。
-    /// </summary>
-    public bool ServeVirtual => Kind == StrmPlaybackDecisionKind.VirtualCached || Kind == StrmPlaybackDecisionKind.VirtualUnprobed;
-
-    /// <summary>
-    /// Gets or sets 是否触发后台探针写缓存。
-    /// </summary>
-    public bool EnqueueWarmup => Kind == StrmPlaybackDecisionKind.VirtualUnprobed || Kind == StrmPlaybackDecisionKind.NativeWithWarmup;
-}
-
-/// <summary>
 /// 客户端分流策略（纯逻辑，可单元测试）。
 /// 原生流程：所有 Client 以 Jellyfin 开头的官方 Web/Android/iOS/Media Player，以及未知客户端（空/缺失），一律走原生行为且不触发后台探针写缓存。
 /// 白名单第三方客户端：仅名单内客户端可走虚拟直连与后台预热。
@@ -116,46 +72,6 @@ public static class StrmClientPolicy
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// 综合决策。
-    /// </summary>
-    /// <param name="masterEnabled">总开关。</param>
-    /// <param name="directOnCacheMiss">子开关：无缓存时返回直链。</param>
-    /// <param name="clientName">客户端名称（可为空，未知按原生处理）。</param>
-    /// <param name="whitelist">已解析白名单。</param>
-    /// <param name="cacheHit">缓存是否命中（调用方仅在 ShouldReadCache 为 true 时才需查库）。</param>
-    /// <returns>决策结果。</returns>
-    public static StrmPlaybackDecision Resolve(
-        bool masterEnabled,
-        bool directOnCacheMiss,
-        string? clientName,
-        IEnumerable<string> whitelist,
-        bool cacheHit)
-    {
-        if (!masterEnabled)
-        {
-            return new StrmPlaybackDecision { Kind = StrmPlaybackDecisionKind.Native, ShouldReadCache = false };
-        }
-
-        if (!IsWhitelistedThirdParty(clientName, whitelist))
-        {
-            // 原生流程（含官方 Jellyfin*、未知客户端、非白名单第三方）：一律原生，且不触发后台探针。
-            return new StrmPlaybackDecision { Kind = StrmPlaybackDecisionKind.Native, ShouldReadCache = false };
-        }
-
-        if (cacheHit)
-        {
-            return new StrmPlaybackDecision { Kind = StrmPlaybackDecisionKind.VirtualCached, ShouldReadCache = true };
-        }
-
-        if (directOnCacheMiss)
-        {
-            return new StrmPlaybackDecision { Kind = StrmPlaybackDecisionKind.VirtualUnprobed, ShouldReadCache = true };
-        }
-
-        return new StrmPlaybackDecision { Kind = StrmPlaybackDecisionKind.NativeWithWarmup, ShouldReadCache = true };
     }
 
     /// <summary>

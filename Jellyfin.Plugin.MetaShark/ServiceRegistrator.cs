@@ -1,5 +1,4 @@
 using System.IO;
-using System.Net.Http;
 using Jellyfin.Plugin.MetaShark.Api;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
 using MediaBrowser.Common.Configuration;
@@ -40,19 +39,6 @@ namespace Jellyfin.Plugin.MetaShark
             {
                 return new MoviePilotApi(ctx.GetRequiredService<ILoggerFactory>());
             });
-            serviceCollection.AddSingleton<IStrmProbeCacheStore>((ctx) =>
-            {
-                var appPaths = ctx.GetRequiredService<IApplicationPaths>();
-                var dbPath = Path.Combine(appPaths.DataPath, "metashark", StrmProbeConstants.DbFileName);
-                return new SqliteStrmProbeCacheStore(dbPath, ctx.GetRequiredService<ILogger<SqliteStrmProbeCacheStore>>());
-            });
-            serviceCollection.AddSingleton<IStrmProber>((ctx) =>
-            {
-                return new HttpStrmProber(
-                    ctx.GetRequiredService<IHttpClientFactory>(),
-                    ctx.GetRequiredService<ILogger<HttpStrmProber>>());
-            });
-            serviceCollection.AddSingleton<IMediaSourceProvider, StrmProbeMediaSourceProvider>();
             // 取流 302 直跳：全局 ActionFilter（鉴权之后执行），只劫白名单客户端的纯静态取流，其余全部放行。
             serviceCollection.AddTransient<StrmDirectRedirectFilter>();
             serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<StrmDirectRedirectFilter>());

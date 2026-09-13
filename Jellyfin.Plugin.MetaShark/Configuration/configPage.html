@@ -209,21 +209,13 @@
                                     is="emby-checkbox" />
                                 <span>strm 探针缓存预热（总开关）</span>
                             </label>
-                            <div class="fieldDescription">关闭时整个加速链路（缓存读取、虚拟直连、后台预热）全部停用，所有客户端走原生行为</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
-                            <label class="emby-checkbox-label" for="EnableStrmProbeDirectOnCacheMiss">
-                                <input id="EnableStrmProbeDirectOnCacheMiss" name="EnableStrmProbeDirectOnCacheMiss"
-                                    type="checkbox" is="emby-checkbox" />
-                                <span>无缓存时返回直链</span>
-                            </label>
-                            <div class="fieldDescription">仅白名单第三方客户端生效；关闭时缓存未命中走原生行为（仍会后台预热写缓存供下次命中）</div>
+                            <div class="fieldDescription">关闭时入库真探停用；取流 302 直跳由下方独立开关控制</div>
                         </div>
                         <div class="inputContainer strmprobe-child">
                             <label class="inputLabel inputLabelUnfocused" for="StrmProbeClientWhitelist">第三方客户端名单</label>
                             <input id="StrmProbeClientWhitelist" name="StrmProbeClientWhitelist" type="text"
                                 is="emby-input" placeholder="Yamby" />
-                            <div class="fieldDescription">逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端一律走原生行为</div>
+                            <div class="fieldDescription">取流 302 直跳的生效客户端名单，逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端不生效</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription strmprobe-child">
                             <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
@@ -287,7 +279,6 @@
                         document.querySelector('#MoviePilotApiToken').value = config.MoviePilotApiToken || '';
 
                         document.querySelector('#EnableStrmProbeWarmup').checked = config.EnableStrmProbeWarmup === true;
-                        document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked = config.EnableStrmProbeDirectOnCacheMiss !== false;
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
                         document.querySelector('#EnableStrmProbeLibraryRefresh').checked = config.EnableStrmProbeLibraryRefresh === true;
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
@@ -335,7 +326,6 @@
                         config.MoviePilotBaseUrl = document.querySelector('#MoviePilotBaseUrl').value;
                         config.MoviePilotApiToken = document.querySelector('#MoviePilotApiToken').value;
                         config.EnableStrmProbeWarmup = document.querySelector('#EnableStrmProbeWarmup').checked;
-                        config.EnableStrmProbeDirectOnCacheMiss = document.querySelector('#EnableStrmProbeDirectOnCacheMiss').checked;
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;
                         config.EnableStrmProbeLibraryRefresh = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;

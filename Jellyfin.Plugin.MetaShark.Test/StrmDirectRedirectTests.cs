@@ -50,12 +50,12 @@ namespace Jellyfin.Plugin.MetaShark.Test
         [TestMethod]
         public void Decide_VirtualId_RedirectsAsVirtual()
         {
-            var key = StrmProbeCacheKey.Compute(StrmUrl, FileSize, Signature);
-            var virtualId = StrmVirtualSourceFactory.DeriveStableId(key);
+            var key = StrmDirectRedirectFilter.ComputeKey(StrmUrl, FileSize, Signature);
+            var virtualId = StrmDirectRedirectFilter.DeriveStableId(key);
             var whitelist = Whitelist("Lenna");
 
             var decision = StrmDirectRedirectFilter.Decide(
-                "GET", "Videos", "GetVideoStream", BaseArgs(virtualId),
+                "GET", "Videos", "GetVideoStreamByContainer", BaseArgs(virtualId),
                 "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature);
             Assert.IsNotNull(decision);
             Assert.AreEqual(StrmUrl, decision.TargetUrl);
@@ -233,8 +233,8 @@ namespace Jellyfin.Plugin.MetaShark.Test
         [TestMethod]
         public void MediaSourceIdMatches_NormalizesDashesAndCase()
         {
-            var key = StrmProbeCacheKey.Compute(StrmUrl, FileSize, Signature);
-            var virtualId = StrmVirtualSourceFactory.DeriveStableId(key);
+            var key = StrmDirectRedirectFilter.ComputeKey(StrmUrl, FileSize, Signature);
+            var virtualId = StrmDirectRedirectFilter.DeriveStableId(key);
 
             Assert.IsTrue(StrmDirectRedirectFilter.MediaSourceIdMatches(ItemId.ToString("D"), ItemId, virtualId));
             Assert.IsTrue(StrmDirectRedirectFilter.MediaSourceIdMatches(ItemId.ToString("N").ToUpperInvariant(), ItemId, virtualId));
