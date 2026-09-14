@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MetaShark.ScheduledTasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
+using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Collections;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Tasks;
 using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -435,6 +440,39 @@ namespace Jellyfin.Plugin.MetaShark.Test
             await service.DelayedTrueProbeAsync(id, CancellationToken.None);
 
             Assert.AreEqual(1, calls.FindAll(c => c.Refreshed).Count);
+        }
+
+        // ---------- DI 注册回归（core 反射发现计划任务并经 ActivatorUtilities 构造） ----------
+
+        [TestMethod]
+        public void DailyTask_Resolvable_From_Production_ServiceRegistrations()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+
+            new ServiceRegistrator().RegisterServices(
+                services,
+                new Mock<MediaBrowser.Controller.IServerApplicationHost>().Object);
+
+            var appPaths = new Mock<IApplicationPaths>();
+            appPaths.SetupGet(p => p.DataPath).Returns(Path.Combine(Path.GetTempPath(), "metashark-di-test"));
+            services.AddSingleton(appPaths.Object);
+            services.AddSingleton(new Mock<MediaBrowser.Controller.Library.ILibraryManager>().Object);
+            services.AddSingleton(new Mock<MediaBrowser.Controller.Library.IMediaSourceManager>().Object);
+            services.AddSingleton(new Mock<ICollectionManager>().Object);
+            services.AddSingleton(new Mock<MediaBrowser.Model.IO.IFileSystem>().Object);
+
+            using var provider = services.BuildServiceProvider();
+
+            // 生产注册必须能构造该任务：core 反射发现后经 ActivatorUtilities 构造，
+            // 解析失败会丢弃任务并把整个插件标记 Malfunctioned。
+            var task = ActivatorUtilities.CreateInstance<StrmMediaProbeDailyTask>(provider);
+            Assert.IsNotNull(task);
+
+            // hosted service 与任务注入的 warmup 必须是同一实例（共享并发闸门与 ItemAdded 订阅）。
+            var warmup = provider.GetRequiredService<StrmProbeWarmupService>();
+            var hosted = provider.GetServices<IHostedService>().OfType<StrmProbeWarmupService>().Single();
+            Assert.AreSame(warmup, hosted);
         }
     }
 }
