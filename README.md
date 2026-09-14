@@ -1,8 +1,8 @@
 # jellyfin-plugin-metashark
 
-[![release](https://img.shields.io/github/v/release/cxfksword/jellyfin-plugin-metashark)](https://github.com/cxfksword/jellyfin-plugin-metashark/releases)
-[![platform](https://img.shields.io/badge/jellyfin-10.11.x-lightgrey?logo=jellyfin)](https://github.com/cxfksword/jellyfin-plugin-metashark/releases)
-[![license](https://img.shields.io/github/license/cxfksword/jellyfin-plugin-metashark)](https://github.com/cxfksword/jellyfin-plugin-metashark/main/LICENSE) 
+[![release](https://img.shields.io/github/v/release/wx2020/jellyfin-plugin-metashark)](https://github.com/wx2020/jellyfin-plugin-metashark/releases)
+[![platform](https://img.shields.io/badge/jellyfin-10.11.x-lightgrey?logo=jellyfin)](https://github.com/wx2020/jellyfin-plugin-metashark/releases)
+[![license](https://img.shields.io/github/license/wx2020/jellyfin-plugin-metashark)](https://github.com/wx2020/jellyfin-plugin-metashark/main/LICENSE) 
 
 jellyfin电影元数据插件，影片信息只要从豆瓣获取，并由TheMovieDb补全缺失的剧集数据。
 
@@ -14,7 +14,7 @@ jellyfin电影元数据插件，影片信息只要从豆瓣获取，并由TheMov
 
 ## 安装插件
 
-添加插件存储库（本 fork 含虚拟季孤儿集修复与豆瓣图床 502 修复，版本 `v2.3.7.1` 起可用）：
+添加插件存储库（本 fork 在原版基础上增加：strm 网盘直链播放与缓存、入库/每日媒体探测、MoviePilot 豆瓣数据优先通道，以及虚拟季孤儿集与豆瓣图床 502 修复）：
 
 国内加速：https://ghfast.top/https://github.com/wx2020/jellyfin-plugin-metashark/releases/download/manifest/manifest_cn.json
 
@@ -22,7 +22,7 @@ jellyfin电影元数据插件，影片信息只要从豆瓣获取，并由TheMov
 
 > 上游原地址：https://github.com/cxfksword/jellyfin-plugin-metashark/releases/download/manifest/manifest.json（无本 fork 修复内容）
 
-> 如果都无法访问，可以直接从 [Release](https://github.com/cxfksword/jellyfin-plugin-metashark/releases) 页面下载，并解压到 jellyfin 插件目录中使用
+> 如果都无法访问，可以直接从 [Release](https://github.com/wx2020/jellyfin-plugin-metashark/releases) 页面下载，并解压到 jellyfin 插件目录中使用
 
 ## 如何使用
 

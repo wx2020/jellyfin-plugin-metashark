@@ -87,6 +87,65 @@ namespace Jellyfin.Plugin.MetaShark.Providers
         }
 
         /// <summary>
+        /// 测试用配置覆盖（PlaybackInfo 免在线元数据开关），保证单测离线确定性。
+        /// </summary>
+        internal bool? TestConfigOverride { get; set; }
+
+        /// <summary>
+        /// 条目是否由 MetaShark 刮削过（已有本插件的来源标记与对应 id）。
+        /// </summary>
+        /// <param name="info">条目查询信息。</param>
+        /// <returns>已刮削返回 true。</returns>
+        protected internal static bool IsScrapedByMetashark(ItemLookupInfo info)
+        {
+            if (info == null)
+            {
+                return false;
+            }
+
+            var sid = info.GetProviderId(DoubanProviderId);
+            var tmdbId = info.GetProviderId(MetadataProvider.Tmdb);
+            var metaSource = info.GetMetaSource(Plugin.ProviderId);
+            var hasTmdbMeta = metaSource == MetaSource.Tmdb && !string.IsNullOrEmpty(tmdbId);
+            var hasDoubanMeta = metaSource != MetaSource.Tmdb && !string.IsNullOrEmpty(sid);
+            return hasTmdbMeta || hasDoubanMeta;
+        }
+
+        /// <summary>
+        /// 是否应短路在线元数据查询：开关开启、当前为 PlaybackInfo 请求、且条目已刮削。
+        /// </summary>
+        /// <param name="enabled">开关值。</param>
+        /// <param name="isPlaybackInfo">是否 PlaybackInfo 请求。</param>
+        /// <param name="info">条目查询信息。</param>
+        /// <returns>应短路返回 true。</returns>
+        internal static bool ShouldSkipOnlineMetadata(bool enabled, bool isPlaybackInfo, ItemLookupInfo info)
+        {
+            return enabled && isPlaybackInfo && IsScrapedByMetashark(info);
+        }
+
+        /// <summary>
+        /// 当前刷新是否由 PlaybackInfo 请求触发（core 对 strm/缺流条目在 PlaybackInfo 内做 FullRefresh）。
+        /// HttpContext 不可用时返回 false（fail-open，不影响后台/手动刷新）。
+        /// </summary>
+        /// <returns>PlaybackInfo 请求返回 true。</returns>
+        protected bool IsPlaybackInfoRequest()
+        {
+            var path = this._httpContextAccessor.HttpContext?.Request.Path.Value;
+            return !string.IsNullOrEmpty(path)
+                && path.EndsWith("/PlaybackInfo", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// PlaybackInfo 免在线元数据开关（测试覆盖 &gt; 插件配置 &gt; 默认 false）。
+        /// </summary>
+        /// <returns>开启返回 true。</returns>
+        protected bool IsPlaybackMetadataSkipEnabled()
+        {
+            return this.TestConfigOverride
+                ?? (Plugin.Instance?.Configuration?.EnableSkipOnlineMetadataOnPlaybackInfo ?? false);
+        }
+
+        /// <summary>
         /// MoviePilot 优先搜索（M2）。未启用、未命中或异常时返回空列表，由调用方回退直连。
         /// </summary>
         protected async Task<List<DoubanSubject>> SearchMoviePilotAsync(string keyword, bool isMovie, CancellationToken cancellationToken)
