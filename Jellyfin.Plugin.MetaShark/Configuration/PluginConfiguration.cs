@@ -123,6 +123,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public string StrmProbeDailyScanTime { get; set; } = string.Empty;
 
     /// <summary>
+    /// ffprobe 缓存有效期（天）。缓存 key 由直链 URL 派生，URL 变化即天然失效，本值仅作同 URL 换内容的安全阀。
+    /// 默认 90；填 0 或负数表示永不过期。命中后会自动滑动续期。修改即时生效。
+    /// </summary>
+    public int StrmProbeCacheTtlDays { get; set; } = 90;
+
+    /// <summary>
     /// 取流 302 直跳：白名单第三方客户端的纯静态取流（/Videos/…/stream.mkv?Static=true）直接 302
     /// 到本地 .strm 文件首行的直链，手机直连网盘、服务端不再代理字节。默认关闭；转码/混流请求不受影响。
     /// </summary>

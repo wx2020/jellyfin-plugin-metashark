@@ -24,6 +24,7 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
         private readonly ILibraryManager _libraryManager;
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly StrmProbeWarmupService _warmup;
+        private readonly IMediaInfoProbeCacheStore _probeCacheStore;
         private readonly ILogger<StrmMediaProbeDailyTask> _logger;
 
         /// <summary>
@@ -38,11 +39,13 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
             ILibraryManager libraryManager,
             IMediaSourceManager mediaSourceManager,
             StrmProbeWarmupService warmup,
+            IMediaInfoProbeCacheStore probeCacheStore,
             ILogger<StrmMediaProbeDailyTask> logger)
         {
             _libraryManager = libraryManager;
             _mediaSourceManager = mediaSourceManager;
             _warmup = warmup;
+            _probeCacheStore = probeCacheStore;
             _logger = logger;
         }
 
@@ -76,6 +79,7 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
                 return;
             }
 
+            CleanupExpiredProbeCache();
             var candidates = ScanCandidates();
             var total = candidates.Count;
             if (total == 0)
@@ -115,9 +119,13 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
                 return null;
             }
 
-            if (!TimeSpan.TryParseExact(hhmm.Trim(), @"hh\:mm", CultureInfo.InvariantCulture, out var time)
-                || time < TimeSpan.Zero
-                || time >= TimeSpan.FromDays(1))
+            // 同时接受 "HH:mm" 与 "H:mm"（如 "3:00"），避免用户漏写前导零导致任务静默不注册。
+            if (!TimeOnly.TryParseExact(
+                    hhmm.Trim(),
+                    new[] { "HH:mm", "H:mm" },
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var time))
             {
                 return null;
             }
@@ -125,7 +133,7 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
             return new TaskTriggerInfo
             {
                 Type = TaskTriggerInfoType.DailyTrigger,
-                TimeOfDayTicks = time.Ticks,
+                TimeOfDayTicks = time.ToTimeSpan().Ticks,
             };
         }
 
@@ -135,6 +143,22 @@ namespace Jellyfin.Plugin.MetaShark.ScheduledTasks
         internal static bool NeedsVideoProbe(IReadOnlyList<MediaStream>? streams)
         {
             return streams == null || streams.Count == 0 || !streams.Any(s => s.Type == MediaStreamType.Video);
+        }
+
+        private void CleanupExpiredProbeCache()
+        {
+            try
+            {
+                var removed = _probeCacheStore.RemoveExpired(DateTime.UtcNow);
+                if (removed > 0)
+                {
+                    _logger.LogInformation("strm 每日探测：清理过期 ffprobe 缓存 {Count} 条", removed);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "strm 每日探测：清理过期 ffprobe 缓存失败");
+            }
         }
 
         private List<BaseItem> ScanCandidates()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
@@ -55,6 +56,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
 
             public void Set(MediaInfoProbeCacheEntry entry)
             {
+                SetCount++;
                 _map[entry.Key] = entry;
             }
 
@@ -78,6 +80,10 @@ namespace Jellyfin.Plugin.MetaShark.Test
             }
 
             public int Count => _map.Count;
+
+            public int SetCount { get; private set; }
+
+            public IReadOnlyDictionary<string, MediaInfoProbeCacheEntry> Entries => _map;
         }
 
         private static MediaInfo SampleMediaInfo()
@@ -103,9 +109,15 @@ namespace Jellyfin.Plugin.MetaShark.Test
             };
         }
 
-        private static IMediaEncoder BuildEncoder(Mock<IMediaEncoder> mock, IMediaInfoProbeCacheStore store)
+        private static IMediaEncoder BuildEncoder(Mock<IMediaEncoder> mock, IMediaInfoProbeCacheStore store, int? ttlDaysOverride = null)
         {
-            return CachingMediaEncoderProxy.Create(mock.Object, store, new NullLogger<CachingMediaEncoderProxy>());
+            var proxy = CachingMediaEncoderProxy.Create(mock.Object, store, new NullLogger<CachingMediaEncoderProxy>());
+            if (ttlDaysOverride.HasValue)
+            {
+                ((CachingMediaEncoderProxy)(object)proxy).TestConfigOverride = ttlDaysOverride.Value;
+            }
+
+            return proxy;
         }
 
         [TestMethod]
@@ -187,6 +199,90 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var info = await encoder.GetMediaInfo(HttpRequest("https://pan.example.com/c.mkv"), CancellationToken.None);
             Assert.AreEqual("mkv", info.Container);
             mock.Verify(m => m.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task DefaultTtl_Writes_NinetyDays()
+        {
+            var store = new FakeMediaInfoStore();
+            var mock = new Mock<IMediaEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(SampleMediaInfo());
+            var encoder = BuildEncoder(mock, store);
+
+            await encoder.GetMediaInfo(HttpRequest("https://pan.example.com/ttl.mkv"), CancellationToken.None);
+
+            var entry = store.Entries.Values.Single();
+            Assert.IsTrue(entry.ExpiresAtUtc > DateTime.UtcNow.AddDays(89), "应约为 90 天后");
+            Assert.IsTrue(entry.ExpiresAtUtc < DateTime.UtcNow.AddDays(91), "应约为 90 天后");
+        }
+
+        [TestMethod]
+        public async Task Hit_NearExpiry_Renews()
+        {
+            var url = "https://pan.example.com/renew.mkv";
+            var key = CachingMediaEncoderProxy.ComputeKey(url);
+            var store = new FakeMediaInfoStore();
+            store.Set(new MediaInfoProbeCacheEntry
+            {
+                Key = key,
+                Url = url,
+                MediaInfoJson = "{\"Container\":\"mkv\"}",
+                ProbedAtUtc = DateTime.UtcNow.AddDays(-89),
+                ExpiresAtUtc = DateTime.UtcNow.AddDays(1),
+            });
+
+            var mock = new Mock<IMediaEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(SampleMediaInfo());
+            var encoder = BuildEncoder(mock, store);
+
+            var info = await encoder.GetMediaInfo(HttpRequest(url), CancellationToken.None);
+
+            Assert.AreEqual("mkv", info.Container);
+            mock.Verify(m => m.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+            Assert.IsTrue(store.Entries[key].ExpiresAtUtc > DateTime.UtcNow.AddDays(89), "命中后应续期到约 90 天");
+        }
+
+        [TestMethod]
+        public async Task Hit_PlentyRemaining_DoesNotRenew()
+        {
+            var url = "https://pan.example.com/fresh.mkv";
+            var key = CachingMediaEncoderProxy.ComputeKey(url);
+            var store = new FakeMediaInfoStore();
+            store.Set(new MediaInfoProbeCacheEntry
+            {
+                Key = key,
+                Url = url,
+                MediaInfoJson = "{\"Container\":\"mkv\"}",
+                ProbedAtUtc = DateTime.UtcNow.AddDays(-10),
+                ExpiresAtUtc = DateTime.UtcNow.AddDays(80),
+            });
+            var setsAfterSeed = store.SetCount;
+
+            var mock = new Mock<IMediaEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(SampleMediaInfo());
+            var encoder = BuildEncoder(mock, store);
+
+            await encoder.GetMediaInfo(HttpRequest(url), CancellationToken.None);
+
+            Assert.AreEqual(setsAfterSeed, store.SetCount, "剩余充足时不应写回");
+        }
+
+        [TestMethod]
+        public async Task TtlZero_NeverExpires()
+        {
+            var store = new FakeMediaInfoStore();
+            var mock = new Mock<IMediaEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.GetMediaInfo(It.IsAny<MediaInfoRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(SampleMediaInfo());
+            var encoder = BuildEncoder(mock, store, ttlDaysOverride: 0);
+
+            await encoder.GetMediaInfo(HttpRequest("https://pan.example.com/never.mkv"), CancellationToken.None);
+
+            var entry = store.Entries.Values.Single();
+            Assert.AreEqual(StrmProbeConstants.NeverExpireUtc, entry.ExpiresAtUtc);
         }
 
         [TestMethod]

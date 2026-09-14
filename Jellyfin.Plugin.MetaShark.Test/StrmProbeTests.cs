@@ -273,12 +273,35 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.AreEqual(0, calls.FindAll(c => c.Refreshed).Count);
         }
 
-        // ---------- daily task (每日定时探测) ----------
+        [TestMethod]
+        public void OnItemAdded_NonStrm_Does_Not_Schedule_DelayedProbe()
+        {
+            var strmMovie = NewStrmMovie(Guid.NewGuid(), "/strm/g.strm");
+            var plainMovie = NewStrmMovie(Guid.NewGuid(), "/media/plain2.mkv");
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemById(strmMovie.Id)).Returns(strmMovie);
+            lib.Setup(l => l.GetItemById(plainMovie.Id)).Returns(plainMovie);
 
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+
+            // 非 strm：不应排任何延迟任务
+            var nonStrmService = NewTrueProbeService(lib.Object, calls);
+            nonStrmService.OnItemAdded(null, new MediaBrowser.Controller.Library.ItemChangeEventArgs { Item = plainMovie });
+            Assert.AreEqual(0, calls.Count);
+
+            // strm：排延迟任务（测试里 DelayAsync 同步完成，可即时断言）
+            var strmService = NewTrueProbeService(lib.Object, calls);
+            strmService.OnItemAdded(null, new MediaBrowser.Controller.Library.ItemChangeEventArgs { Item = strmMovie });
+            Assert.IsTrue(calls.Count >= 1);
+        }
+
+        // ---------- daily task (每日定时探测) ----------
         [TestMethod]
         [DataRow("03:00", 3, 0)]
         [DataRow("23:59", 23, 59)]
         [DataRow("00:00", 0, 0)]
+        [DataRow("3:00", 3, 0)]
+        [DataRow("9:05", 9, 5)]
         public void DailyTrigger_ValidTime_Parses(string input, int h, int m)
         {
             var trigger = StrmMediaProbeDailyTask.BuildDailyTrigger(input);
@@ -293,7 +316,6 @@ namespace Jellyfin.Plugin.MetaShark.Test
         [DataRow("   ")]
         [DataRow("24:00")]
         [DataRow("ab:cd")]
-        [DataRow("3:00")]
         public void DailyTrigger_InvalidOrEmpty_ReturnsNull(string? input)
         {
             Assert.IsNull(StrmMediaProbeDailyTask.BuildDailyTrigger(input));
@@ -324,12 +346,14 @@ namespace Jellyfin.Plugin.MetaShark.Test
         private static StrmMediaProbeDailyTask NewDailyTask(
             MediaBrowser.Controller.Library.ILibraryManager lib,
             Mock<MediaBrowser.Controller.Library.IMediaSourceManager> msm,
-            StrmProbeWarmupService warmup)
+            StrmProbeWarmupService warmup,
+            IMediaInfoProbeCacheStore? store = null)
         {
             return new StrmMediaProbeDailyTask(
                 lib,
                 msm.Object,
                 warmup,
+                store ?? new Mock<IMediaInfoProbeCacheStore>().Object,
                 new TestGenericLogger<StrmMediaProbeDailyTask>());
         }
 
@@ -379,6 +403,24 @@ namespace Jellyfin.Plugin.MetaShark.Test
             await task.ExecuteAsync(new Progress<double>(), CancellationToken.None);
 
             Assert.AreEqual(1, calls.FindAll(c => c.Refreshed).Count);
+        }
+
+        [TestMethod]
+        public async Task DailyTask_Enabled_Cleans_Expired_ProbeCache()
+        {
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<MediaBrowser.Controller.Entities.InternalItemsQuery>()))
+                .Returns(new List<MediaBrowser.Controller.Entities.BaseItem>());
+            var msm = new Mock<MediaBrowser.Controller.Library.IMediaSourceManager>();
+            var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
+            var warmup = NewTrueProbeService(lib.Object, calls);
+            var store = new Mock<IMediaInfoProbeCacheStore>();
+            var task = NewDailyTask(lib.Object, msm, warmup, store.Object);
+            task.TestConfigOverride = true;
+
+            await task.ExecuteAsync(new Progress<double>(), CancellationToken.None);
+
+            store.Verify(s => s.RemoveExpired(It.IsAny<DateTime>()), Times.Once);
         }
 
         [TestMethod]

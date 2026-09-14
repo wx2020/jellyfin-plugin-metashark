@@ -86,18 +86,19 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
 
     internal void OnItemAdded(object? sender, ItemChangeEventArgs e)
     {
-        var config = Plugin.Instance?.Configuration;
-        if (config == null || !config.EnableStrmProbeLibraryRefresh)
+        if (!IsLibraryRefreshEnabled())
         {
             return;
         }
 
-        // 入库真探：去抖后在后台做一次完整远程探测，把流信息写入媒体库，
-        // 探测必经 ffprobe 缓存装饰器，顺带预填缓存，使首次详情页也不再真实出网。
-        if (e.Item != null)
+        // 入库真探：只对 strm 条目排后台探测。若不过滤，全库导入时数千个非 strm 条目
+        // 会各挂一枚 5 分钟延迟任务，醒来后才在 ProbeNowAsync 里发现不是 strm 而空转。
+        if (e.Item == null || !StrmFileHelper.IsStrmPath(e.Item.Path))
         {
-            _ = DelayedTrueProbeAsync(e.Item.Id, CancellationToken.None);
+            return;
         }
+
+        _ = DelayedTrueProbeAsync(e.Item.Id, CancellationToken.None);
     }
 
     private bool IsLibraryRefreshEnabled()

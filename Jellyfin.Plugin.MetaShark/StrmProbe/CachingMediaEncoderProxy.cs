@@ -28,6 +28,11 @@ public class CachingMediaEncoderProxy : DispatchProxy
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _flights = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
 
     /// <summary>
+    /// 测试用 TTL 天数覆盖（沿用项目 <c>TestConfigOverride</c> 模式，保证单测离线确定性）。
+    /// </summary>
+    internal int? TestConfigOverride { get; set; }
+
+    /// <summary>
     /// 用装饰器包装已有的 <c>IMediaEncoder</c> 实例。
     /// </summary>
     /// <param name="inner">core 的真实编码器。</param>
@@ -182,7 +187,7 @@ public class CachingMediaEncoderProxy : DispatchProxy
                 Url = url,
                 MediaInfoJson = JsonSerializer.Serialize(info),
                 ProbedAtUtc = now,
-                ExpiresAtUtc = now.Add(StrmProbeConstants.DefaultTtl),
+                ExpiresAtUtc = ComputeExpiry(now),
             });
             return info;
         }
@@ -215,12 +220,65 @@ public class CachingMediaEncoderProxy : DispatchProxy
         try
         {
             mediaInfo = JsonSerializer.Deserialize<MediaInfo>(entry.MediaInfoJson);
-            return mediaInfo != null;
+            if (mediaInfo == null)
+            {
+                return false;
+            }
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "ffprobe 缓存反序列化失败，按未命中处理 key={CacheKey}", key);
             return false;
+        }
+
+        RenewIfNeeded(entry);
+        return true;
+    }
+
+    /// <summary>
+    /// 解析当前有效 TTL 天数：测试覆盖 &gt; 插件配置 &gt; 默认值。&lt;=0 表示永不过期。
+    /// </summary>
+    private int ResolveTtlDays()
+    {
+        return TestConfigOverride
+            ?? Plugin.Instance?.Configuration?.StrmProbeCacheTtlDays
+            ?? StrmProbeConstants.DefaultCacheTtlDays;
+    }
+
+    private DateTime ComputeExpiry(DateTime nowUtc)
+    {
+        var days = ResolveTtlDays();
+        return days <= 0 ? StrmProbeConstants.NeverExpireUtc : nowUtc.AddDays(days);
+    }
+
+    /// <summary>
+    /// 命中滑动续期：仅当剩余有效期不足一半时才写回延长，把写放大压到「每半周期至多一次」，
+    /// 使活跃文件永不重探，冷文件在 TTL 窗口内也几乎不重探。
+    /// </summary>
+    private void RenewIfNeeded(MediaInfoProbeCacheEntry entry)
+    {
+        var days = ResolveTtlDays();
+        if (days <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var now = DateTime.UtcNow;
+            var ttl = TimeSpan.FromDays(days);
+            if (entry.ExpiresAtUtc - now >= ttl / 2)
+            {
+                return;
+            }
+
+            entry.ExpiresAtUtc = now.Add(ttl);
+            _store.Set(entry);
+            _logger.LogDebug("ffprobe 缓存续期 key={CacheKey}", entry.Key);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "ffprobe 缓存续期失败 key={CacheKey}", entry.Key);
         }
     }
 }

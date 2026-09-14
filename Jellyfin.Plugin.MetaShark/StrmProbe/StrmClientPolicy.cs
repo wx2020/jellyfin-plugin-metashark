@@ -7,8 +7,8 @@ namespace Jellyfin.Plugin.MetaShark.StrmProbe;
 
 /// <summary>
 /// 客户端分流策略（纯逻辑，可单元测试）。
-/// 原生流程：所有 Client 以 Jellyfin 开头的官方 Web/Android/iOS/Media Player，以及未知客户端（空/缺失），一律走原生行为且不触发后台探针写缓存。
-/// 白名单第三方客户端：仅名单内客户端可走虚拟直连与后台预热。
+/// 原生流程：所有 Client 以 Jellyfin 开头的官方 Web/Android/iOS/Media Player，以及未知客户端（空/缺失），一律走原生行为。
+/// 白名单第三方客户端：仅名单内客户端可触发取流 302 直跳（虚拟直连源已下线）。
 /// </summary>
 public static class StrmClientPolicy
 {

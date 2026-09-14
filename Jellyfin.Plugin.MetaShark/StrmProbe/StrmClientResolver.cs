@@ -6,10 +6,12 @@ using Microsoft.AspNetCore.Http;
 namespace Jellyfin.Plugin.MetaShark.StrmProbe;
 
 /// <summary>
-/// 客户端名称解析器：与服务端鉴权口径对齐。
-/// Emby 系第三方客户端（如 Yamby）常用 api_key/token 鉴权，请求里可能根本没有鉴权头；
-/// 此时服务端鉴权中间件已把解析结果（含设备记录回填的 Client）缓存在
-/// <c>HttpContext.Items["AuthorizationInfo"]</c>，优先读取它，再回退到请求头/查询串解析。
+/// 客户端名称解析器：仅作请求头/查询串的兼容兜底。
+/// 调用方（如取流 302 直跳过滤器）应优先从已认证的 <c>HttpContext.User</c> claims 取 Client；
+/// core 10.11 认证链把 Client 写进 claims，且不写 <c>HttpContext.Items["AuthorizationInfo"]</c>
+/// （该键在正常 API 请求里恒为空），故本类的 Items 分支只是旧版兼容。
+/// Emby 系第三方客户端（如 Yamby）常用 api_key/token 鉴权，请求里可能根本没有鉴权头，
+/// 此时解析不到客户端名，调用方按未知客户端=原生处理。
 /// </summary>
 public static class StrmClientResolver
 {
@@ -26,8 +28,7 @@ public static class StrmClientResolver
     /// <returns>客户端名称或 null。</returns>
     public static string? Resolve(HttpRequest? request, IDictionary<object, object?>? items)
     {
-        // 1) 服务端已解析并缓存的鉴权信息：覆盖 header/query/token 任一鉴权方式，
-        //    Client 已由设备记录回填，与服务端会话显示口径一致。
+        // 1) 旧版兼容：鉴权中间件缓存的 AuthorizationInfo（core 10.11 正常请求里该键恒为空）。
         if (items != null
             && items.TryGetValue(AuthorizationInfoItemsKey, out var cached)
             && cached is AuthorizationInfo authInfo
