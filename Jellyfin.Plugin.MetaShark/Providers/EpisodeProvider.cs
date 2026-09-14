@@ -1,5 +1,6 @@
 ﻿using Jellyfin.Plugin.MetaShark.Api;
 using Jellyfin.Plugin.MetaShark.Core;
+using Jellyfin.Plugin.MetaShark.Model;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
