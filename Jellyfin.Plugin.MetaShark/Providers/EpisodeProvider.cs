@@ -206,8 +206,9 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             // 虚拟季默认 S01，但特典/Extra 除外，避免正片 SP 被误收进 S01 或正片被丢进 S00。
             // 线上复现：扁平 /白夜追凶/E01.strm 初扫 ParentIndex=null，若留 null 会先建“未知季(null)”再重建，
             // 元数据刷新不迁移 Episode.SeasonId，造成孤儿集。
+            // 由 EnableVirtualSeasonOrphanFix 总开关统一控制（关闭即回退上游行为）。
             var isSpecialOrExtra = parseResult.IsSpecial || parseResult.IsExtra || NameParser.IsSpecialDirectory(info.Path) || NameParser.IsExtraDirectory(info.Path);
-            if (info.ParentIndexNumber is null or 1 && isVirtualSeason && !isSpecialOrExtra)
+            if (config.EnableVirtualSeasonOrphanFix && info.ParentIndexNumber is null or 1 && isVirtualSeason && !isSpecialOrExtra)
             {
                 if (seasonFolderPath != null)
                 {

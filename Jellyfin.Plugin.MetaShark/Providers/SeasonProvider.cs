@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -64,13 +65,9 @@ namespace Jellyfin.Plugin.MetaShark.Providers
 
                 // 虚拟季兜底：扁平布局（/白夜追凶/E01.strm）info.Path 为空且 IndexNumber 为 null 时，
                 // 若直接返回空会导致 Jellyfin 先建“未知季(null)”再删除重建“第1季”，而元数据刷新不迁移
-                // 已有 Episode.ParentId/SeasonId，造成 1068 孤儿集。S00 特典（IndexNumber=0）不受影响。
-                // 此处默认按 S01 承接，与 EpisodeProvider 虚拟季修正保持一致。
-                if (seasonNumber is null && string.IsNullOrEmpty(info.Path))
-                {
-                    seasonNumber = 1;
-                    this.Log($"Season [{info.Name}] virtual path empty, default seasonNumber to 1 to avoid null-season churn.");
-                }
+                // 已有 Episode.ParentId/SeasonId，造成孤儿集。S00 特典（IndexNumber=0）不受影响。
+                // 豆瓣分支这里只补"空路径按 S01"（季号已在上方猜过）；TMDB 分支同款兜底见下方。
+                seasonNumber = this.ApplyVirtualSeasonFallback(seasonNumber, info.Path, guessFromDirectory: false);
 
                 // 搜索豆瓣季 id
                 if (string.IsNullOrEmpty(seasonSid))
@@ -139,10 +136,56 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             // tmdb季级没有对应id，只通过indexNumber区分
             if (metaSource == MetaSource.Tmdb && !string.IsNullOrEmpty(seriesTmdbId))
             {
+                // 虚拟季兜底同样适用于 TMDB 来源（原实现只在豆瓣分支生效，导致 TMDB 剧集仍先建 null 季）。
+                seasonNumber = this.ApplyVirtualSeasonFallback(seasonNumber, info.Path, guessFromDirectory: true);
                 return await this.GetMetadataByTmdb(info, seriesTmdbId, seasonNumber, cancellationToken).ConfigureAwait(false);
             }
 
             return result;
+        }
+
+        private bool IsVirtualSeasonOrphanFixEnabled()
+        {
+            return this.config.EnableVirtualSeasonOrphanFix;
+        }
+
+        private int? ApplyVirtualSeasonFallback(int? seasonNumber, string? path, bool guessFromDirectory)
+        {
+            if (!this.IsVirtualSeasonOrphanFixEnabled())
+            {
+                return seasonNumber;
+            }
+
+            var resolved = ResolveVirtualSeasonNumber(seasonNumber, path, guessFromDirectory, this.GuessSeasonNumberByDirectoryName);
+            if (resolved != seasonNumber)
+            {
+                this.Log($"Season virtual fallback. old: {seasonNumber?.ToString() ?? "null"} new: {resolved?.ToString() ?? "null"} path: {path}");
+            }
+
+            return resolved;
+        }
+
+        /// <summary>
+        /// 纯函数：虚拟季季号兜底。无季号且无季文件夹时按 S01 承接；可选从目录名猜季号。
+        /// </summary>
+        /// <param name="seasonNumber">当前季号。</param>
+        /// <param name="path">季路径（虚拟季为空）。</param>
+        /// <param name="guessFromDirectory">是否允许从目录名猜季号。</param>
+        /// <param name="guess">目录名猜季号实现。</param>
+        /// <returns>兜底后的季号。</returns>
+        internal static int? ResolveVirtualSeasonNumber(int? seasonNumber, string? path, bool guessFromDirectory, Func<string?, int?> guess)
+        {
+            if (guessFromDirectory && seasonNumber is null)
+            {
+                seasonNumber = guess(path);
+            }
+
+            if (seasonNumber is null && string.IsNullOrEmpty(path))
+            {
+                seasonNumber = 1;
+            }
+
+            return seasonNumber;
         }
 
 

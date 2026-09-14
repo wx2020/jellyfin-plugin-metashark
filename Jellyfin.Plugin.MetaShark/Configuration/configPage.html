@@ -242,6 +242,19 @@
                             <div class="fieldDescription">已刮削 strm 条目（电影/剧集）在客户端请求播放信息（详情页）时不再查询豆瓣/TMDB，直接用库内数据；手动刷新元数据不受影响。默认关闭</div>
                         </div>
                     </fieldset>
+                    <fieldset class="verticalSection verticalSection-extrabottompadding">
+                        <legend>
+                            <h3>剧集</h3>
+                        </legend>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableVirtualSeasonOrphanFix">
+                                <input id="EnableVirtualSeasonOrphanFix" name="EnableVirtualSeasonOrphanFix"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>虚拟季孤儿集修复</span>
+                            </label>
+                            <div class="fieldDescription">扁平布局剧集无季文件夹时按 S01 归位，并在每次扫描后自动重绑未挂季的集；纯本地无网络。默认开启</div>
+                        </div>
+                    </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                         <span>Save</span>
                     </button>
@@ -292,6 +305,7 @@
                         document.querySelector('#StrmProbeCacheTtlDays').value = config.StrmProbeCacheTtlDays != null ? config.StrmProbeCacheTtlDays : 90;
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
                         document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked = config.EnableSkipOnlineMetadataOnPlaybackInfo === true;
+                        document.querySelector('#EnableVirtualSeasonOrphanFix').checked = config.EnableVirtualSeasonOrphanFix !== false;
 
                         changeProxyDisplay();
                         checkDoubanLogin();
@@ -348,6 +362,7 @@
                         }
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
                         config.EnableSkipOnlineMetadataOnPlaybackInfo = document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked;
+                        config.EnableVirtualSeasonOrphanFix = document.querySelector('#EnableVirtualSeasonOrphanFix').checked;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
 
