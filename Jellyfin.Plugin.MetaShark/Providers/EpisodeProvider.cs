@@ -1,5 +1,7 @@
 ﻿using Jellyfin.Plugin.MetaShark.Api;
 using Jellyfin.Plugin.MetaShark.Core;
+using Jellyfin.Plugin.MetaShark.Model;
+using Jellyfin.Plugin.MetaShark.StrmProbe;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
@@ -49,6 +51,18 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             var fileName = Path.GetFileName(info.Path);
             this.Log($"GetEpisodeMetadata of [name]: {info.Name} [fileName]: {fileName} number: {info.IndexNumber} ParentIndexNumber: {info.ParentIndexNumber} IsMissingEpisode: {info.IsMissingEpisode} EnableTmdb: {config.EnableTmdb} DisplayOrder: {info.SeriesDisplayOrder}");
             var result = new MetadataResult<Episode>();
+
+            // 已刮削 strm 剧集在 PlaybackInfo（详情页）刷新时短路，零出网；返回空结果由 core 保留库内数据。
+            // 判据：集级来源标记（新刮削写入）或库内已有元数据（存量兜底）。
+            // 先做廉价门控，命中上下文后才查库，避免每次刷新都 FindByPath。
+            var skipContext = this.IsPlaybackMetadataSkipEnabled()
+                && this.IsPlaybackInfoRequest()
+                && StrmFileHelper.IsStrmPath(info.Path);
+            if (skipContext && (HasMetasharkProvenance(info) || this.EpisodeHasStoredMetadata(info)))
+            {
+                this.Log($"PlaybackInfo 已刮削，跳过在线元数据查询 [name]: {info.Name}");
+                return result;
+            }
 
             // Allowing this will dramatically increase scan times
             if (info.IsMissingEpisode)
@@ -136,6 +150,9 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                     this.Log("获取单集 imdb id 失败. error: {0}", ex.Message);
                 }
             }
+
+            // 写入集级来源标记：后续 PlaybackInfo 刷新可据此短路（存量集无标记由 EpisodeHasStoredMetadata 兜底）。
+            item.SetProviderId(Plugin.ProviderId, $"{MetaSource.Tmdb}_{seriesTmdbId}");
 
             result.Item = item;
 

@@ -91,16 +91,17 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             var result = new MetadataResult<Movie>();
 
             // 使用刷新元数据时，providerIds会保留旧有值，只有识别/新增才会没值
-            var sid = info.GetProviderId(DoubanProviderId);
-            var tmdbId = info.GetProviderId(MetadataProvider.Tmdb);
-            var metaSource = info.GetMetaSource(Plugin.ProviderId);
+            var state = GetScrapeState(info);
+            var sid = state.Sid;
+            var tmdbId = state.TmdbId;
+            var metaSource = state.Source;
             // 注意：会存在元数据有tmdbId，但metaSource没值的情况（之前由TMDB插件刮削导致）
-            var hasTmdbMeta = metaSource == MetaSource.Tmdb && !string.IsNullOrEmpty(tmdbId);
-            var hasDoubanMeta = metaSource != MetaSource.Tmdb && !string.IsNullOrEmpty(sid);
+            var hasTmdbMeta = state.HasTmdbMeta;
+            var hasDoubanMeta = state.HasDoubanMeta;
             this.Log($"GetMovieMetadata of [name]: {info.Name} [fileName]: {fileName} metaSource: {metaSource} EnableTmdb: {config.EnableTmdb}");
 
-            // 已刮削条目在 PlaybackInfo（详情页）刷新时短路，零出网；返回空结果由 core 保留库内数据。
-            if (ShouldSkipOnlineMetadata(this.IsPlaybackMetadataSkipEnabled(), this.IsPlaybackInfoRequest(), info))
+            // 已刮削 strm 条目在 PlaybackInfo（详情页）刷新时短路，零出网；返回空结果由 core 保留库内数据。
+            if (ShouldSkipOnlineMetadata(this.IsPlaybackMetadataSkipEnabled(), this.IsPlaybackInfoRequest(), info, state.IsScraped))
             {
                 this.Log($"PlaybackInfo 已刮削，跳过在线元数据查询 [name]: {info.Name}");
                 return result;

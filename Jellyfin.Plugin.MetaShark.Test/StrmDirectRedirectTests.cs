@@ -35,14 +35,14 @@ namespace Jellyfin.Plugin.MetaShark.Test
 
             var dashed = StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(ItemId.ToString("D")),
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature);
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature);
             Assert.IsNotNull(dashed);
             Assert.AreEqual(StrmUrl, dashed.TargetUrl);
             Assert.AreEqual("native", dashed.SourceKind);
 
             var compact = StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(ItemId.ToString("N")),
-                "lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature);
+                "lenna", whitelist, ItemId, StrmUrl, FileSize, Signature);
             Assert.IsNotNull(compact);
             Assert.AreEqual("native", compact.SourceKind);
         }
@@ -56,19 +56,10 @@ namespace Jellyfin.Plugin.MetaShark.Test
 
             var decision = StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStreamByContainer", BaseArgs(virtualId),
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature);
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature);
             Assert.IsNotNull(decision);
             Assert.AreEqual(StrmUrl, decision.TargetUrl);
             Assert.AreEqual("virtual", decision.SourceKind);
-        }
-
-        [TestMethod]
-        public void Decide_MasterSwitchOff_NoRedirect()
-        {
-            var decision = StrmDirectRedirectFilter.Decide(
-                "GET", "Videos", "GetVideoStream", BaseArgs(),
-                "Lenna", Whitelist("Lenna"), false, ItemId, StrmUrl, FileSize, Signature);
-            Assert.IsNull(decision);
         }
 
         [TestMethod]
@@ -77,13 +68,13 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var whitelist = Whitelist("Lenna");
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Images", "GetVideoStream", BaseArgs(),
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetMasterHlsPlaylist", BaseArgs(),
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "POST", "Videos", "GetVideoStream", BaseArgs(),
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
         }
 
         [TestMethod]
@@ -94,13 +85,13 @@ namespace Jellyfin.Plugin.MetaShark.Test
             missing.Remove("static");
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", missing,
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
 
             var notStatic = BaseArgs();
             notStatic["static"] = false;
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", notStatic,
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
         }
 
         [TestMethod]
@@ -125,7 +116,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
                 Assert.IsNull(
                     StrmDirectRedirectFilter.Decide(
                         "GET", "Videos", "GetVideoStream", args,
-                        "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature),
+                        "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature),
                     "veto arg should block redirect: " + veto.Name);
             }
 
@@ -136,7 +127,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             harmless["tag"] = "38d1b77d";
             Assert.IsNotNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", harmless,
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
         }
 
         [TestMethod]
@@ -145,13 +136,13 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var whitelist = Whitelist("Yamby", "Lenna");
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(),
-                null, whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                null, whitelist, ItemId, StrmUrl, FileSize, Signature));
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(),
-                "Jellyfin Web", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Jellyfin Web", whitelist, ItemId, StrmUrl, FileSize, Signature));
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(),
-                "Infuse", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Infuse", whitelist, ItemId, StrmUrl, FileSize, Signature));
         }
 
         [TestMethod]
@@ -160,13 +151,13 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var whitelist = Whitelist("Lenna");
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(Guid.NewGuid().ToString("N")),
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
 
             var missing = BaseArgs();
             missing["mediaSourceId"] = null;
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", missing,
-                "Lenna", whitelist, true, ItemId, StrmUrl, FileSize, Signature));
+                "Lenna", whitelist, ItemId, StrmUrl, FileSize, Signature));
         }
 
         [TestMethod]
@@ -175,10 +166,10 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var whitelist = Whitelist("Lenna");
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(),
-                "Lenna", whitelist, true, ItemId, "file:///strm/movie.mkv", FileSize, Signature));
+                "Lenna", whitelist, ItemId, "file:///strm/movie.mkv", FileSize, Signature));
             Assert.IsNull(StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStream", BaseArgs(),
-                "Lenna", whitelist, true, ItemId, "  ", FileSize, Signature));
+                "Lenna", whitelist, ItemId, "  ", FileSize, Signature));
         }
 
         [TestMethod]
@@ -187,7 +178,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             // /Videos/{id}/stream.mkv 走的是 GetVideoStreamByContainer（core 10.11 实测），不是 GetVideoStream。
             var decision = StrmDirectRedirectFilter.Decide(
                 "GET", "Videos", "GetVideoStreamByContainer", BaseArgs(),
-                "Lenna", Whitelist("Lenna"), true, ItemId, StrmUrl, FileSize, Signature);
+                "Lenna", Whitelist("Lenna"), ItemId, StrmUrl, FileSize, Signature);
             Assert.IsNotNull(decision);
             Assert.AreEqual(StrmUrl, decision.TargetUrl);
             Assert.AreEqual("native", decision.SourceKind);
@@ -213,7 +204,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
         {
             var decision = StrmDirectRedirectFilter.Decide(
                 "HEAD", "Videos", "GetVideoStream", BaseArgs(),
-                "Yamby", Whitelist("Yamby"), true, ItemId, StrmUrl, FileSize, Signature);
+                "Yamby", Whitelist("Yamby"), ItemId, StrmUrl, FileSize, Signature);
             Assert.IsNotNull(decision);
         }
 

@@ -135,7 +135,7 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableStrmDirectRedirect { get; set; } = false;
 
     /// <summary>
-    /// 已刮削条目在 PlaybackInfo（详情页）触发的刷新中短路元数据提供者：不再查询豆瓣/TMDB，
+    /// 已刮削 strm 条目（电影/剧集）在 PlaybackInfo（详情页）触发的刷新中短路元数据提供者：不再查询豆瓣/TMDB，
     /// 直接返回空结果由 core 保留库内数据。仅作用于 PlaybackInfo 路径，手动刷新元数据不受影响。默认关闭。
     /// </summary>
     public bool EnableSkipOnlineMetadataOnPlaybackInfo { get; set; } = false;

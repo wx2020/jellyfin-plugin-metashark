@@ -18,7 +18,9 @@ using System.Web;
 using TMDbLib.Objects.General;
 using Jellyfin.Plugin.MetaShark.Configuration;
 using Jellyfin.Plugin.MetaShark.Core;
+using Jellyfin.Plugin.MetaShark.StrmProbe;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Providers;
 using TMDbLib.Objects.Languages;
@@ -92,47 +94,120 @@ namespace Jellyfin.Plugin.MetaShark.Providers
         internal bool? TestConfigOverride { get; set; }
 
         /// <summary>
+        /// 条目的刮削来源状态（sid/tmdbId/metaSource 及派生判据），供各 provider 复用，避免判据重复。
+        /// </summary>
+        protected internal readonly record struct MetasharkScrapeState(string? Sid, string? TmdbId, MetaSource Source)
+        {
+            /// <summary>Gets 是否为豆瓣来源且已有 id。</summary>
+            public bool HasDoubanMeta => Source != MetaSource.Tmdb && !string.IsNullOrEmpty(Sid);
+
+            /// <summary>Gets 是否为 TMDB 来源且已有 id。</summary>
+            public bool HasTmdbMeta => Source == MetaSource.Tmdb && !string.IsNullOrEmpty(TmdbId);
+
+            /// <summary>Gets 是否已由 MetaShark 刮削（任一来源）。</summary>
+            public bool IsScraped => HasDoubanMeta || HasTmdbMeta;
+        }
+
+        /// <summary>
+        /// 读取条目的刮削来源状态。
+        /// </summary>
+        /// <param name="info">条目查询信息。</param>
+        /// <returns>刮削来源状态。</returns>
+        protected internal static MetasharkScrapeState GetScrapeState(IHasProviderIds? info)
+        {
+            if (info == null)
+            {
+                return new MetasharkScrapeState(null, null, MetaSource.None);
+            }
+
+            return new MetasharkScrapeState(
+                info.GetProviderId(DoubanProviderId),
+                info.GetProviderId(MetadataProvider.Tmdb),
+                info.GetMetaSource(Plugin.ProviderId));
+        }
+
+        /// <summary>
         /// 条目是否由 MetaShark 刮削过（已有本插件的来源标记与对应 id）。
         /// </summary>
         /// <param name="info">条目查询信息。</param>
         /// <returns>已刮削返回 true。</returns>
         protected internal static bool IsScrapedByMetashark(ItemLookupInfo info)
         {
-            if (info == null)
+            return GetScrapeState(info).IsScraped;
+        }
+
+        /// <summary>
+        /// 条目是否带有 MetaShark 来源标记（集级标记不要求 Tmdb id，供剧集复用）。
+        /// </summary>
+        /// <param name="info">条目查询信息。</param>
+        /// <returns>有标记返回 true。</returns>
+        protected internal static bool HasMetasharkProvenance(ItemLookupInfo info)
+        {
+            return info != null && !string.IsNullOrEmpty(info.GetProviderId(Plugin.ProviderId));
+        }
+
+        /// <summary>
+        /// 剧集是否已存有元数据（存量库无集级标记时的兜底：有 Overview 或首播日期即视为已刮削）。
+        /// </summary>
+        /// <param name="info">剧集查询信息。</param>
+        /// <returns>已存有元数据返回 true。</returns>
+        protected bool EpisodeHasStoredMetadata(EpisodeInfo info)
+        {
+            if (string.IsNullOrWhiteSpace(info?.Path))
             {
                 return false;
             }
 
-            var sid = info.GetProviderId(DoubanProviderId);
-            var tmdbId = info.GetProviderId(MetadataProvider.Tmdb);
-            var metaSource = info.GetMetaSource(Plugin.ProviderId);
-            var hasTmdbMeta = metaSource == MetaSource.Tmdb && !string.IsNullOrEmpty(tmdbId);
-            var hasDoubanMeta = metaSource != MetaSource.Tmdb && !string.IsNullOrEmpty(sid);
-            return hasTmdbMeta || hasDoubanMeta;
+            var item = this._libraryManager.FindByPath(info.Path, false) as Episode;
+            return item != null && (item.PremiereDate != null || !string.IsNullOrWhiteSpace(item.Overview));
         }
 
         /// <summary>
-        /// 是否应短路在线元数据查询：开关开启、当前为 PlaybackInfo 请求、且条目已刮削。
+        /// 是否应短路在线元数据查询：开关开启、当前为 PlaybackInfo 请求、strm 条目、且已刮削。
         /// </summary>
         /// <param name="enabled">开关值。</param>
         /// <param name="isPlaybackInfo">是否 PlaybackInfo 请求。</param>
         /// <param name="info">条目查询信息。</param>
+        /// <param name="scraped">条目是否已刮削。</param>
         /// <returns>应短路返回 true。</returns>
-        internal static bool ShouldSkipOnlineMetadata(bool enabled, bool isPlaybackInfo, ItemLookupInfo info)
+        internal static bool ShouldSkipOnlineMetadata(bool enabled, bool isPlaybackInfo, ItemLookupInfo info, bool scraped)
         {
-            return enabled && isPlaybackInfo && IsScrapedByMetashark(info);
+            return enabled && isPlaybackInfo && StrmFileHelper.IsStrmPath(info?.Path) && scraped;
         }
 
         /// <summary>
         /// 当前刷新是否由 PlaybackInfo 请求触发（core 对 strm/缺流条目在 PlaybackInfo 内做 FullRefresh）。
-        /// HttpContext 不可用时返回 false（fail-open，不影响后台/手动刷新）。
+        /// 先按 URL 径判定（容忍尾斜杠），再回退已路由的 Action 名，降低对路径形态的脆性依赖；
+        /// HttpContext 不可用返回 false（fail-open，不影响后台/手动刷新）。
         /// </summary>
         /// <returns>PlaybackInfo 请求返回 true。</returns>
         protected bool IsPlaybackInfoRequest()
         {
-            var path = this._httpContextAccessor.HttpContext?.Request.Path.Value;
-            return !string.IsNullOrEmpty(path)
-                && path.EndsWith("/PlaybackInfo", StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                var http = this._httpContextAccessor.HttpContext;
+                if (http == null)
+                {
+                    return false;
+                }
+
+                var path = http.Request.Path.Value;
+                if (!string.IsNullOrEmpty(path)
+                    && path.TrimEnd('/').EndsWith("/PlaybackInfo", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                var descriptor = http.GetEndpoint()?.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>();
+                var action = descriptor?.ActionName ?? http.GetRouteData()?.Values["action"]?.ToString();
+                return !string.IsNullOrEmpty(action)
+                    && action.Contains("PlaybackInfo", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                // 判定失败一律按非 PlaybackInfo 处理（fail-open，不影响刷新）。
+                return false;
+            }
         }
 
         /// <summary>

@@ -165,7 +165,6 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
             args,
             clientName,
             whitelist,
-            masterEnabled: true,
             itemId,
             url,
             fileSize,
@@ -187,7 +186,6 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
     /// <param name="args">已绑定的 Action 参数。</param>
     /// <param name="clientName">客户端名称（可为空，未知按原生处理）。</param>
     /// <param name="whitelist">已解析白名单。</param>
-    /// <param name="masterEnabled">直跳总开关。</param>
     /// <param name="itemId">路由/参数中的条目 Id。</param>
     /// <param name="strmUrl">实时读出的 .strm 直链。</param>
     /// <param name="fileSize">strm 文件大小。</param>
@@ -200,17 +198,11 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         IDictionary<string, object?> args,
         string? clientName,
         IReadOnlyList<string> whitelist,
-        bool masterEnabled,
         Guid itemId,
         string? strmUrl,
         long fileSize,
         string signature)
     {
-        if (!masterEnabled)
-        {
-            return null;
-        }
-
         if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase))
         {
