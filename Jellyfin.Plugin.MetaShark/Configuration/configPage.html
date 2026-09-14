@@ -229,7 +229,13 @@
                             <label class="inputLabel inputLabelUnfocused" for="StrmProbeDailyScanTime">每日定时探测时间</label>
                             <input id="StrmProbeDailyScanTime" name="StrmProbeDailyScanTime" type="text"
                                 is="emby-input" placeholder="03:00" />
-                            <div class="fieldDescription">每天此时间自动扫描没有媒体流信息的 strm 条目并探测补全（HH:mm 24 小时制）。留空则不自动执行，仍可在 控制台-计划任务 中手动运行；修改后需重启生效。需开启 入库媒体探测 开关</div>
+                            <div class="fieldDescription">每天此时间自动扫描没有媒体流信息的 strm 条目并探测补全（HH:mm 24 小时制，支持 3:00 或 03:00）。留空则不自动执行，仍可在 控制台-计划任务 中手动运行；修改后需重启生效。需开启 入库媒体探测 开关</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="StrmProbeCacheTtlDays">ffprobe 缓存有效期（天）</label>
+                            <input id="StrmProbeCacheTtlDays" name="StrmProbeCacheTtlDays" type="number" min="0"
+                                is="emby-input" placeholder="90" />
+                            <div class="fieldDescription">远程探测结果的缓存天数，默认 90；填 0 表示永不过期（仅直链变化时失效）。命中后会自动续期，修改即时生效</div>
                         </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -279,6 +285,7 @@
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
                         document.querySelector('#EnableStrmProbeLibraryRefresh').checked = config.EnableStrmProbeLibraryRefresh === true;
                         document.querySelector('#StrmProbeDailyScanTime').value = config.StrmProbeDailyScanTime || '';
+                        document.querySelector('#StrmProbeCacheTtlDays').value = config.StrmProbeCacheTtlDays != null ? config.StrmProbeCacheTtlDays : 90;
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
 
                         changeProxyDisplay();
@@ -326,6 +333,10 @@
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;
                         config.EnableStrmProbeLibraryRefresh = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
                         config.StrmProbeDailyScanTime = document.querySelector('#StrmProbeDailyScanTime').value;
+                        config.StrmProbeCacheTtlDays = parseInt(document.querySelector('#StrmProbeCacheTtlDays').value, 10);
+                        if (isNaN(config.StrmProbeCacheTtlDays)) {
+                            config.StrmProbeCacheTtlDays = 90;
+                        }
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
