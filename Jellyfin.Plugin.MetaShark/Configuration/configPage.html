@@ -221,9 +221,15 @@
                             <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
                                 <input id="EnableStrmProbeLibraryRefresh" name="EnableStrmProbeLibraryRefresh"
                                     type="checkbox" is="emby-checkbox" />
-                                <span>入库真探</span>
+                                <span>入库媒体探测</span>
                             </label>
                             <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存，使首次详情页/播放不再真实出网；默认关闭。与取流 302 直跳相互独立。会产生网盘探测流量，高峰期谨慎开启</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="StrmProbeDailyScanTime">每日定时探测时间</label>
+                            <input id="StrmProbeDailyScanTime" name="StrmProbeDailyScanTime" type="text"
+                                is="emby-input" placeholder="03:00" />
+                            <div class="fieldDescription">每天此时间自动扫描没有媒体流信息的 strm 条目并探测补全（HH:mm 24 小时制）。留空则不自动执行，仍可在 控制台-计划任务 中手动运行；修改后需重启生效。需开启 入库媒体探测 开关</div>
                         </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -272,6 +278,7 @@
 
                         document.querySelector('#StrmProbeClientWhitelist').value = config.StrmProbeClientWhitelist || 'Yamby';
                         document.querySelector('#EnableStrmProbeLibraryRefresh').checked = config.EnableStrmProbeLibraryRefresh === true;
+                        document.querySelector('#StrmProbeDailyScanTime').value = config.StrmProbeDailyScanTime || '';
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
 
                         changeProxyDisplay();
@@ -318,6 +325,7 @@
                         config.MoviePilotApiToken = document.querySelector('#MoviePilotApiToken').value;
                         config.StrmProbeClientWhitelist = document.querySelector('#StrmProbeClientWhitelist').value;
                         config.EnableStrmProbeLibraryRefresh = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
+                        config.StrmProbeDailyScanTime = document.querySelector('#StrmProbeDailyScanTime').value;
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
