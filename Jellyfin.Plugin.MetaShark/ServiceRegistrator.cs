@@ -1,12 +1,10 @@
 using System.IO;
 using Jellyfin.Plugin.MetaShark.Api;
-using Jellyfin.Plugin.MetaShark.ScheduledTasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
-using MediaBrowser.Model.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,7 +19,6 @@ namespace Jellyfin.Plugin.MetaShark
         {
             serviceCollection.AddHttpContextAccessor();
             serviceCollection.AddHostedService<BoxSetManager>();
-            serviceCollection.AddSingleton<IScheduledTask, StrmMediaProbeDailyTask>();
             serviceCollection.AddSingleton((ctx) =>
             {
                 return new DoubanApi(ctx.GetRequiredService<ILoggerFactory>());
@@ -55,7 +52,11 @@ namespace Jellyfin.Plugin.MetaShark
             // B 方案：装饰 core 的 IMediaEncoder，只缓存 http/https 远程探测的 ffprobe 结果，
             // 使 strm 条目重复的远程内容探测不再真实出网。本地文件探测与其它方法全部直通。
             CachingMediaEncoderProxy.Decorate(serviceCollection);
-            serviceCollection.AddHostedService<StrmProbeWarmupService>();
+            // 计划任务构造函数注入具体 StrmProbeWarmupService：必须同时以自身类型注册，
+            // 且 hosted service 复用同一实例（否则 ActivatorUtilities 无法解析具体类型，
+            // 任务构造失败会被 core 丢弃并把整个插件标记 Malfunctioned；且两份实例会各自持有并发闸门）。
+            serviceCollection.AddSingleton<StrmProbeWarmupService>();
+            serviceCollection.AddHostedService(sp => sp.GetRequiredService<StrmProbeWarmupService>());
         }
     }
 }
