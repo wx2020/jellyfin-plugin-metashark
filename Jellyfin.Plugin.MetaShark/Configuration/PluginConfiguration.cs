@@ -118,6 +118,15 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableStrmProbeLibraryRefresh { get; set; } = false;
 
     /// <summary>
+    /// 虚拟季孤儿集修复总开关：统一控制"扁平 strm 剧集虚拟季归位"的全部行为——
+    /// ① 入库解析期把无季文件夹的虚拟季季号兜底为 1（对所有元数据来源生效）；
+    /// ② 每集元数据修正时同款兜底，避免先建 null 季再删造成孤儿；
+    /// ③ 每次完整扫描结束后，把仍没挂到季的 strm 剧集重绑到对应虚拟季（纯本地，无网络）。
+    /// 关闭后回退到上游原始行为。默认开启。修改即时生效。
+    /// </summary>
+    public bool EnableVirtualSeasonOrphanFix { get; set; } = true;
+
+    /// <summary>
     /// 每日定时探测时间（HH:mm，24 小时制）。留空则每日任务不自动执行（仍可手动运行）。修改后需重启生效。
     /// </summary>
     public string StrmProbeDailyScanTime { get; set; } = string.Empty;

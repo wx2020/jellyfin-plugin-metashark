@@ -8,6 +8,9 @@ using Jellyfin.Plugin.MetaShark.ScheduledTasks;
 using Jellyfin.Plugin.MetaShark.StrmProbe;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Tasks;
 using MediaBrowser.Controller.Net;
@@ -442,6 +445,118 @@ namespace Jellyfin.Plugin.MetaShark.Test
             Assert.AreEqual(1, calls.FindAll(c => c.Refreshed).Count);
         }
 
+        // ---------- 虚拟季孤儿集重绑（扫描后兜底） ----------
+
+        private static Episode NewStrmEpisode(Guid id, string path, int? parentIndex, Guid seasonId)
+        {
+            var episode = (Episode)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Episode));
+            episode.Id = id;
+            episode.Name = "relink-target";
+            episode.Path = path;
+            episode.ParentIndexNumber = parentIndex;
+            episode.SeasonId = seasonId;
+            return episode;
+        }
+
+        private static StrmSeasonRelinkPostScanTask NewRelinkTask(
+            MediaBrowser.Controller.Library.ILibraryManager libraryManager,
+            List<(bool Refreshed, MetadataRefreshMode Mode)> calls,
+            bool refreshThrow = false)
+        {
+            var task = new StrmSeasonRelinkPostScanTask(
+                libraryManager,
+                new Mock<IProviderManager>().Object,
+                new Mock<MediaBrowser.Model.IO.IFileSystem>().Object,
+                new TestGenericLogger<StrmSeasonRelinkPostScanTask>());
+            task.RefreshItemAsync = (item, options, ct) =>
+            {
+                lock (calls)
+                {
+                    calls.Add((true, options.MetadataRefreshMode));
+                }
+
+                if (refreshThrow)
+                {
+                    throw new InvalidOperationException("relink boom");
+                }
+
+                return Task.CompletedTask;
+            };
+            return task;
+        }
+
+        [TestMethod]
+        public void SeasonRelink_ScanOrphans_Filters()
+        {
+            var candidate = NewStrmEpisode(Guid.NewGuid(), "/strm/a.strm", 1, Guid.Empty);
+            var bound = NewStrmEpisode(Guid.NewGuid(), "/strm/b.strm", 1, Guid.NewGuid());
+            var nonStrm = NewStrmEpisode(Guid.NewGuid(), "/media/c.mkv", 1, Guid.Empty);
+            var noSeason = NewStrmEpisode(Guid.NewGuid(), "/strm/d.strm", null, Guid.Empty);
+
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>()))
+                .Returns(new List<BaseItem> { candidate, bound, nonStrm, noSeason });
+
+            var task = NewRelinkTask(lib.Object, new List<(bool, MetadataRefreshMode)>());
+
+            var orphans = task.ScanOrphans();
+
+            Assert.AreEqual(1, orphans.Count);
+            Assert.AreEqual(candidate.Id, orphans[0].Id);
+        }
+
+        [TestMethod]
+        public async Task SeasonRelink_Disabled_Skips()
+        {
+            var candidate = NewStrmEpisode(Guid.NewGuid(), "/strm/a.strm", 1, Guid.Empty);
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>()))
+                .Returns(new List<BaseItem> { candidate });
+
+            var calls = new List<(bool Refreshed, MetadataRefreshMode Mode)>();
+            var task = NewRelinkTask(lib.Object, calls);
+            task.TestConfigOverride = false;
+
+            await task.Run(new Progress<double>(), CancellationToken.None);
+
+            Assert.AreEqual(0, calls.Count);
+        }
+
+        [TestMethod]
+        public async Task SeasonRelink_Refreshes_Orphans_With_None_Mode()
+        {
+            var candidate = NewStrmEpisode(Guid.NewGuid(), "/strm/a.strm", 1, Guid.Empty);
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>()))
+                .Returns(new List<BaseItem> { candidate });
+
+            var calls = new List<(bool Refreshed, MetadataRefreshMode Mode)>();
+            var task = NewRelinkTask(lib.Object, calls);
+            task.TestConfigOverride = true;
+
+            await task.Run(new Progress<double>(), CancellationToken.None);
+
+            Assert.AreEqual(1, calls.Count);
+            Assert.AreEqual(MetadataRefreshMode.None, calls[0].Mode);
+        }
+
+        [TestMethod]
+        public async Task SeasonRelink_RefreshThrows_DoesNotThrow()
+        {
+            var candidate = NewStrmEpisode(Guid.NewGuid(), "/strm/a.strm", 1, Guid.Empty);
+            var lib = new Mock<MediaBrowser.Controller.Library.ILibraryManager>();
+            lib.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>()))
+                .Returns(new List<BaseItem> { candidate });
+
+            var calls = new List<(bool Refreshed, MetadataRefreshMode Mode)>();
+            var task = NewRelinkTask(lib.Object, calls, refreshThrow: true);
+            task.TestConfigOverride = true;
+
+            await task.Run(new Progress<double>(), CancellationToken.None);
+
+            Assert.AreEqual(1, calls.Count);
+        }
+
         // ---------- DI 注册回归（core 反射发现计划任务并经 ActivatorUtilities 构造） ----------
 
         [TestMethod]
@@ -461,6 +576,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             services.AddSingleton(new Mock<MediaBrowser.Controller.Library.IMediaSourceManager>().Object);
             services.AddSingleton(new Mock<ICollectionManager>().Object);
             services.AddSingleton(new Mock<MediaBrowser.Model.IO.IFileSystem>().Object);
+            services.AddSingleton(new Mock<IProviderManager>().Object);
 
             using var provider = services.BuildServiceProvider();
 
@@ -468,6 +584,10 @@ namespace Jellyfin.Plugin.MetaShark.Test
             // 解析失败会丢弃任务并把整个插件标记 Malfunctioned。
             var task = ActivatorUtilities.CreateInstance<StrmMediaProbeDailyTask>(provider);
             Assert.IsNotNull(task);
+
+            // 扫描后重绑任务同样由 core 反射发现，必须可解析。
+            var relink = ActivatorUtilities.CreateInstance<StrmSeasonRelinkPostScanTask>(provider);
+            Assert.IsNotNull(relink);
 
             // hosted service 与任务注入的 warmup 必须是同一实例（共享并发闸门与 ItemAdded 订阅）。
             var warmup = provider.GetRequiredService<StrmProbeWarmupService>();
