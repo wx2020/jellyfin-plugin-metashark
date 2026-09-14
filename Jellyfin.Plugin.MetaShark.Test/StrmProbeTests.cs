@@ -187,7 +187,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
                 libraryManager,
                 new Mock<MediaBrowser.Model.IO.IFileSystem>().Object,
                 new TestGenericLogger<StrmProbeWarmupService>());
-            service.TestConfigOverride = (true, true);
+            service.TestConfigOverride = true;
             service.DelayAsync = (delay, ct) =>
             {
                 lock (calls)
@@ -223,7 +223,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             lib.Setup(l => l.GetItemById(It.IsAny<Guid>())).Returns(movie);
             var calls = new List<(TimeSpan Delay, bool Refreshed, bool ProbeEnabled)>();
             var service = NewTrueProbeService(lib.Object, calls);
-            service.TestConfigOverride = (true, false);
+            service.TestConfigOverride = false;
 
             await service.DelayedTrueProbeAsync(id, CancellationToken.None);
 

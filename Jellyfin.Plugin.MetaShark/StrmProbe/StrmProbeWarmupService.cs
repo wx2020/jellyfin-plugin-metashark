@@ -26,7 +26,7 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
     /// <summary>
     /// 测试用配置覆盖（沿用 <c>MoviePilotApi.TestConfigOverride</c> 模式，保证单测离线确定性）。
     /// </summary>
-    internal (bool MasterEnabled, bool LibraryRefreshEnabled)? TestConfigOverride { get; set; }
+    internal bool? TestConfigOverride { get; set; }
 
     /// <summary>
     /// 延迟等待实现（默认 <c>Task.Delay</c>），可注入以保证单测离线确定性。
@@ -87,20 +87,14 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
     internal void OnItemAdded(object? sender, ItemChangeEventArgs e)
     {
         var config = Plugin.Instance?.Configuration;
-        if (config == null || !config.EnableStrmProbeWarmup)
+        if (config == null || !config.EnableStrmProbeLibraryRefresh)
         {
             return;
         }
 
-        var path = e.Item?.Path;
-        if (!StrmFileHelper.IsStrmPath(path))
-        {
-            return;
-        }
-
-        // 入库真探（默认关闭）：去抖后在后台做一次完整远程探测，把流信息写入媒体库，
+        // 入库真探：去抖后在后台做一次完整远程探测，把流信息写入媒体库，
         // 探测必经 ffprobe 缓存装饰器，顺带预填缓存，使首次详情页也不再真实出网。
-        if (config.EnableStrmProbeLibraryRefresh && e.Item != null)
+        if (e.Item != null)
         {
             _ = DelayedTrueProbeAsync(e.Item.Id, CancellationToken.None);
         }
@@ -110,11 +104,11 @@ public sealed class StrmProbeWarmupService : IHostedService, IDisposable
     {
         if (TestConfigOverride.HasValue)
         {
-            return TestConfigOverride.Value.MasterEnabled && TestConfigOverride.Value.LibraryRefreshEnabled;
+            return TestConfigOverride.Value;
         }
 
         var config = Plugin.Instance?.Configuration;
-        return config != null && config.EnableStrmProbeWarmup && config.EnableStrmProbeLibraryRefresh;
+        return config != null && config.EnableStrmProbeLibraryRefresh;
     }
 
     /// <summary>
