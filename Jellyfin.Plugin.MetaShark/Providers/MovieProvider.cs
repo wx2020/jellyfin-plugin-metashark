@@ -98,6 +98,14 @@ namespace Jellyfin.Plugin.MetaShark.Providers
             var hasTmdbMeta = metaSource == MetaSource.Tmdb && !string.IsNullOrEmpty(tmdbId);
             var hasDoubanMeta = metaSource != MetaSource.Tmdb && !string.IsNullOrEmpty(sid);
             this.Log($"GetMovieMetadata of [name]: {info.Name} [fileName]: {fileName} metaSource: {metaSource} EnableTmdb: {config.EnableTmdb}");
+
+            // 已刮削条目在 PlaybackInfo（详情页）刷新时短路，零出网；返回空结果由 core 保留库内数据。
+            if (ShouldSkipOnlineMetadata(this.IsPlaybackMetadataSkipEnabled(), this.IsPlaybackInfoRequest(), info))
+            {
+                this.Log($"PlaybackInfo 已刮削，跳过在线元数据查询 [name]: {info.Name}");
+                return result;
+            }
+
             if (!hasDoubanMeta && !hasTmdbMeta)
             {
                 // 处理extras影片

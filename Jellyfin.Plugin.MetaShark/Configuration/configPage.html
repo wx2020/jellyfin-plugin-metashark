@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Template</title>
+    <title>MetaShark 配置</title>
 </head>
 
 <body>
@@ -17,7 +17,7 @@
                         <h2 class="sectionTitle">MetaShark 配置</h2><span id="current_version" name="current_version"
                             is="emby-linkbutton" class="emby-button"></span>
                         <a is="emby-linkbutton" class="raised button-alt headerHelpButton emby-button" target="_blank"
-                            href="https://github.com/cxfksword/jellyfin-plugin-metashark">源码</a>
+                            href="https://github.com/wx2020/jellyfin-plugin-metashark">源码</a>
                     </div>
                 </div>
 
@@ -26,13 +26,32 @@
                         <legend>
                             <h3>豆瓣</h3>
                         </legend>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableMoviePilot">
+                                <input id="EnableMoviePilot" name="EnableMoviePilot" type="checkbox"
+                                    is="emby-checkbox" />
+                                <span>启用 MoviePilot 优先通道</span>
+                            </label>
+                            <div class="fieldDescription">勾选后，电影/电视剧刮削优先从 MoviePilot 获取豆瓣数据，失败时自动回退豆瓣直连。默认关闭，未配置时走原链路</div>
+                        </div>
+                        <div class="inputContainer moviepilot-child">
+                            <label class="inputLabel inputLabelUnfocused" for="MoviePilotBaseUrl">MoviePilot 地址</label>
+                            <input id="MoviePilotBaseUrl" name="MoviePilotBaseUrl" type="text" is="emby-input"
+                                placeholder="http://192.168.5.10:3001" />
+                            <div class="fieldDescription">填写 MoviePilot 实例地址（不要带 /api 后缀）</div>
+                        </div>
+                        <div class="inputContainer moviepilot-child">
+                            <label class="inputLabel inputLabelUnfocused" for="MoviePilotApiToken">API_TOKEN</label>
+                            <input id="MoviePilotApiToken" name="MoviePilotApiToken" type="password" is="emby-input" />
+                            <div class="fieldDescription">在 MoviePilot 前端系统设置中查看，仅保存在本地配置中</div>
+                        </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="DoubanCookies">豆瓣网站cookie<span
                                 id="login_msg"
                                 style="margin-left: 8px; display: none;"></span></label>
                             <textarea rows="5" is="emby-input" type="text" id="DoubanCookies" name="DoubanCookies"
                                 class="emby-input" placeholder="_vwo_uuid_v2=1; __utmv=2; ..."></textarea>
-                            <div class="fieldDescription">可为空，填写可搜索到需登录访问的影片，使用(www.douban.com)分号“;”分隔格式cookie.</div>
+                            <div class="fieldDescription">可为空。填写可搜索登录可见影片的 cookie，多条以分号“;”分隔</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label" for="EnableDoubanAvoidRiskControl">
@@ -41,7 +60,7 @@
                                 <span class="checkboxLabel" style="position:relative">启用防封禁
                                     <img style="position: absolute; top:-12px; width: 32px; height:32px"
                                         src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAABS9JREFUeF7tmWtoHFUUx/9ndne2NmLph5q0yc4m1SSzMS2opRIpGEGLtWotqBS0NIIgCCotVD+aItSi+EB80S8V0YgKWouPNhUMqbWKsWqpya5pQjITRb8IKsruzO4cuXcf7m42yTRkgzs799Puzp17z/md/zn3sYQ6b1Tn/sMH4Cugzgn4KVDnAvCLoJ8CfgrUOQE/BepcAP4q4KeAnwJ1TsBPgToXwMWtAudbG5oCGfsVIlwHYF2NwPsFwIhuWDsq2es6BUbWYWVDUP2CgKtrxPFZZuqGNctf1wDGNLWfgCdq1fmc3e/phnVPsQ+uASQ09TwDV9UyAAb/FjPspkUBiGsq17LzedvL08C1AnwAFRTAwIGYYfULuvFI6HMQ9f7fVbKkCqg2ADF+gHlaVULHk449sBSAaw7AUiuspgAQ0N9pWAeWMsWWA8AZBgaJ0Q4F3WBsrFAXvgVwAcA0QJcBvBbM14NoTaEv8xARDZUAyD8srTXfAJgUYxFoNYObAdw6Vy2qKgCGcihmpk7kJ59sa2i0HPs1MO4s2M60r9NMPV9u4MR6rLLt0EEQPSSeVdq1id+LNmSmw3iky7SOlo81poWuJZDYtN1e/qxqAEbbVkSDdqYpHVA2Bck53TFlf581WBozIg1hDOimda/4KM4VQcfeS8A/9qXWU92jsKTUNXVM+M+Oc6P4HptJD8lxWoLZFUZReuWOlHCfPm29JX4ajai7CLgDhHOZoDLQPZk0pqIr1yY5LYKxoRhC1QAkoupOZryfn0xh54YOMz2cc+qYiIZCdFvHdOrj8Sasyajq1wDasv3ptG6ktkhnWtSdipIdZ55V5g8AwyA6pTg84xAGCk4SvapPp6SKEpp6hIG+ZQEQ19Q3AcjoSuOZX4qZ9sMSQCT0spB2QLVWtV/An/GI+iQRtGLDHMbxmGm9PdESbrcV/mkBAFlsQJIJBjv4kcCD6YB6tHvq71/z41Y6v1RNAXFN/RBChrlGwDudhrVLyldTDxKwVTesTcVOV/o8fiXCGUtNLgSAGR+kQfs3mKmJgsMtwV5SaIdu2Htz8846wFUNwFg09BwxyYlzGnhRN+xHC1Jk3q6b9uXyezT0ADv/qWUWiFyVnycFTuiGdYt0snVFKxynTwG2MbAZzEO6acv6sawKSGjh9YDzJYMaxeQOaGuXkTqZBRA6yaCbHIV7uqbsr2RalG6t/2Kmu4hY3DVcg+ydQ3sJgNIUe0Y3rMcKcIvyXBTPQuGscIRflAISWmg3g94oj1SxgeLZePMlLelAZjeYzuaXw4QW3MJQTuXe/UQ3rO35vplApofBqxUok51G6rMKUSs5v4uIAughoEM3LFlAZZQZm5kwzMSDRIHfY1PJKQk5Gt4P5qeL7b5oAHFNfRzAoUr5Wi5RdpQHYz+nZAETreI+AHTYgXM4ZthiM1RoQsqK4+xhQB6u8q3c4EQkvI+Jn2Xm+2Om/XrJGJFQHxEdyb8zqoVvVsCDiwYQ10IvACTzuGJjlmt0oREJ+Z4B8AOAKAixOXaCooSfI8ZZ8S5D3jHG5pwHOMbAdyLSIGzL9yNghkEfMXOjQtjIwBXyWZFdTNRMQPtcQOe8D4hr6rsA7p7HqJp85CoF4lH1UzBklfVSc3UlVr6h8RIAAAtfinrl6qtS4Fxdi+c2D3sAtHok+kvzx4hHYMxyw/WtsA/AowR8BXg0sK7d8hXgGpVHO/oK8GhgXbvlK8A1Ko929BXg0cC6dstXgGtUHu3oK8CjgXXtlq8A16g82vFfwx5yXxq/mYIAAAAASUVORK5CYII="
-                                        alt="beta" />
+                                        alt="" />
                                 </span>
                             </label>
                             <div class="fieldDescription">勾选后，刮削会变慢，适合刮削大量影片时使用，建议搭配网站cookie一起使用</div>
@@ -177,45 +196,21 @@
                     </fieldset>
                     <fieldset class="verticalSection verticalSection-extrabottompadding">
                         <legend>
-                            <h3>MoviePilot 豆瓣数据优先通道</h3>
-                        </legend>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label" for="EnableMoviePilot">
-                                <input id="EnableMoviePilot" name="EnableMoviePilot" type="checkbox"
-                                    is="emby-checkbox" />
-                                <span>启用 MoviePilot 优先通道</span>
-                            </label>
-                            <div class="fieldDescription">勾选后，电影/电视剧刮削优先从 MoviePilot 获取豆瓣数据，失败时自动回退豆瓣直连。默认关闭，未配置时走原链路</div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="MoviePilotBaseUrl">MoviePilot 地址</label>
-                            <input id="MoviePilotBaseUrl" name="MoviePilotBaseUrl" type="text" is="emby-input"
-                                placeholder="http://192.168.5.10:3001" />
-                            <div class="fieldDescription">填写 MoviePilot 实例地址（不要带 /api 后缀）</div>
-                        </div>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="MoviePilotApiToken">API_TOKEN</label>
-                            <input id="MoviePilotApiToken" name="MoviePilotApiToken" type="password" is="emby-input" />
-                            <div class="fieldDescription">在 MoviePilot 前端系统设置中查看，仅保存在本地配置中</div>
-                        </div>
-                    </fieldset>
-                    <fieldset class="verticalSection verticalSection-extrabottompadding">
-                        <legend>
-                            <h3>网盘直链播放（strm）</h3>
+                            <h3>strm</h3>
                         </legend>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label" for="EnableStrmDirectRedirect">
                                 <input id="EnableStrmDirectRedirect" name="EnableStrmDirectRedirect"
                                     type="checkbox" is="emby-checkbox" />
-                                <span>取流 302 直跳</span>
+                                <span>使用直链播放</span>
                             </label>
-                            <div class="fieldDescription">白名单第三方客户端的纯静态取流直接 302 到网盘直链，手机直连网盘、服务端不再代理字节；默认关闭。转码/混流请求不受影响，部分播放器可能不跟随跳转，开启后请用真机验证</div>
+                            <div class="fieldDescription">白名单客户端静态取流直接跳转 .strm 直链，播放器直连、服务端不中转。默认关闭；转码不受影响，部分播放器不跟随跳转</div>
                         </div>
                         <div class="inputContainer strmredirect-child">
                             <label class="inputLabel inputLabelUnfocused" for="StrmProbeClientWhitelist">第三方客户端名单</label>
                             <input id="StrmProbeClientWhitelist" name="StrmProbeClientWhitelist" type="text"
                                 is="emby-input" placeholder="Yamby;Lenna" />
-                            <div class="fieldDescription">取流 302 直跳的生效客户端名单，逗号/分号/换行分隔，大小写不敏感，默认仅 Yamby。以 Jellyfin 开头的官方客户端与未知客户端不生效</div>
+                            <div class="fieldDescription">名单内客户端才启用；官方与未知客户端不生效。逗号/分号/换行分隔，默认 Yamby</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
@@ -223,19 +218,28 @@
                                     type="checkbox" is="emby-checkbox" />
                                 <span>入库媒体探测</span>
                             </label>
-                            <div class="fieldDescription">新增 strm 入库约 5 分钟后在后台做一次完整远程探测，把流信息写入媒体库并预填 ffprobe 缓存，使首次详情页/播放不再真实出网；默认关闭。与取流 302 直跳相互独立。会产生网盘探测流量，高峰期谨慎开启</div>
+                            <div class="fieldDescription">入库约 5 分钟后后台探测一次并写库缓存，加快首次详情/播放。默认关闭；兼作每日定时探测总开关。有探测流量，高峰慎开</div>
                         </div>
-                        <div class="inputContainer">
+                        <div class="inputContainer strmprobe-child">
                             <label class="inputLabel inputLabelUnfocused" for="StrmProbeDailyScanTime">每日定时探测时间</label>
                             <input id="StrmProbeDailyScanTime" name="StrmProbeDailyScanTime" type="text"
                                 is="emby-input" placeholder="03:00" />
-                            <div class="fieldDescription">每天此时间自动扫描没有媒体流信息的 strm 条目并探测补全（HH:mm 24 小时制，支持 3:00 或 03:00）。留空则不自动执行，仍可在 控制台-计划任务 中手动运行；修改后需重启生效。需开启 入库媒体探测 开关</div>
+                            <div class="fieldDescription">此时刻扫描缺流信息的 strm 条目并探测，24 小时制（3:00/03:00）。留空仅手动运行；需重启生效</div>
                         </div>
                         <div class="inputContainer">
                             <label class="inputLabel inputLabelUnfocused" for="StrmProbeCacheTtlDays">ffprobe 缓存有效期（天）</label>
                             <input id="StrmProbeCacheTtlDays" name="StrmProbeCacheTtlDays" type="number" min="0"
                                 is="emby-input" placeholder="90" />
-                            <div class="fieldDescription">远程探测结果的缓存天数，默认 90；填 0 表示永不过期（仅直链变化时失效）。命中后会自动续期，修改即时生效</div>
+                            <div class="fieldDescription">探测结果缓存天数，默认 90；0=永不过期，直链变化自动失效，命中自动续期</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableSkipOnlineMetadataOnPlaybackInfo">
+                                <input id="EnableSkipOnlineMetadataOnPlaybackInfo"
+                                    name="EnableSkipOnlineMetadataOnPlaybackInfo" type="checkbox"
+                                    is="emby-checkbox" />
+                                <span>已刮削条目详情页免在线元数据查询</span>
+                            </label>
+                            <div class="fieldDescription">已刮削条目在客户端请求播放信息（详情页）时不再查询豆瓣/TMDB，直接用库内数据；手动刷新元数据不受影响。默认关闭</div>
                         </div>
                     </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
@@ -287,17 +291,22 @@
                         document.querySelector('#StrmProbeDailyScanTime').value = config.StrmProbeDailyScanTime || '';
                         document.querySelector('#StrmProbeCacheTtlDays').value = config.StrmProbeCacheTtlDays != null ? config.StrmProbeCacheTtlDays : 90;
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
+                        document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked = config.EnableSkipOnlineMetadataOnPlaybackInfo === true;
 
                         changeProxyDisplay();
                         checkDoubanLogin();
 
-                        // 先补齐控件增强，再应用 strm 子开关状态；并对齐官方 loadView 的
+                        // 先补齐控件增强，再应用子开关状态；并对齐官方 loadView 的
                         // setTimeout(0) 等待方式，二次兜底 polyfill 晚到的情况
                         ensureNativeControlsEnhanced();
                         changeStrmRedirectDisplay();
+                        changeStrmProbeDisplay();
+                        changeMoviePilotDisplay();
                         setTimeout(function () {
                             ensureNativeControlsEnhanced();
                             changeStrmRedirectDisplay();
+                            changeStrmProbeDisplay();
+                            changeMoviePilotDisplay();
                         }, 0);
 
                         Dashboard.hideLoadingMsg();
@@ -338,6 +347,7 @@
                             config.StrmProbeCacheTtlDays = 90;
                         }
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
+                        config.EnableSkipOnlineMetadataOnPlaybackInfo = document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
 
@@ -359,10 +369,36 @@
                     changeStrmRedirectDisplay();
                 });
 
+            document.querySelector('#EnableStrmProbeLibraryRefresh')
+                .addEventListener('change', function (e) {
+                    changeStrmProbeDisplay();
+                });
+
+            document.querySelector('#EnableMoviePilot')
+                .addEventListener('change', function (e) {
+                    changeMoviePilotDisplay();
+                });
+
 
             function changeStrmRedirectDisplay() {
                 let enabled = document.querySelector('#EnableStrmDirectRedirect').checked;
                 document.querySelectorAll('.strmredirect-child').forEach(function (el) {
+                    el.style.opacity = enabled ? '1' : '0.5';
+                    el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
+                });
+            }
+
+            function changeStrmProbeDisplay() {
+                let enabled = document.querySelector('#EnableStrmProbeLibraryRefresh').checked;
+                document.querySelectorAll('.strmprobe-child').forEach(function (el) {
+                    el.style.opacity = enabled ? '1' : '0.5';
+                    el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
+                });
+            }
+
+            function changeMoviePilotDisplay() {
+                let enabled = document.querySelector('#EnableMoviePilot').checked;
+                document.querySelectorAll('.moviepilot-child').forEach(function (el) {
                     el.style.opacity = enabled ? '1' : '0.5';
                     el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
                 });
