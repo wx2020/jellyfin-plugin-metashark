@@ -49,6 +49,11 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
     internal Func<ImageType, Guid[]?, List<string>>? PathSourceOverride { get; set; }
 
     /// <summary>
+    /// 测试用 <c>ILibraryManager</c> 覆盖（用于验证按库取料走的是 parents 重载）。
+    /// </summary>
+    internal Func<ILibraryManager>? LibraryManagerOverride { get; set; }
+
+    /// <summary>
     /// 用装饰器包装已有的 <c>IImageEncoder</c> 实例。
     /// </summary>
     /// <param name="inner">core 的真实编码器。</param>
@@ -199,14 +204,14 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
     }
 
     /// <summary>
-    /// 构造与 core <c>SplashscreenPostScanTask</c> 同款的取料查询；<paramref name="topParentIds"/>
-    /// 非空时用 <c>TopParentIds</c> 限制到白名单库，为 null 时不限库（用于"刷新启动画面"任务在过滤关闭时的路径）。
-    /// 刻意不设 <c>MaxParentalRating</c>：只认白名单，避免"未分级放行"导致白名单内容被误滤。
+    /// 构造与 core <c>SplashscreenPostScanTask</c> 同款的取料查询（不设 <c>MaxParentalRating</c>、不设 <c>TopParentIds</c>）。
+    /// 按库限制由 <c>ILibraryManager.GetItemList(query, parents)</c> 完成——**必须传库对应的 CollectionFolder 父项**，
+    /// 由 core 解析成 <c>CollectionFolder.PhysicalFolderIds</c>；直接写 <c>TopParentIds = 库 CollectionFolder.Id</c>
+    /// 是无效的（条目实际的 TopParentId 是物理根目录 id，两者不相等，会查不到任何条目）。
     /// </summary>
     /// <param name="imageType">图片类型。</param>
-    /// <param name="topParentIds">允许的库 ID；null 表示不限库。</param>
     /// <returns>查询对象。</returns>
-    internal static InternalItemsQuery BuildQuery(ImageType imageType, Guid[]? topParentIds)
+    internal static InternalItemsQuery BuildQuery(ImageType imageType)
     {
         return new InternalItemsQuery
         {
@@ -217,7 +222,6 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
             Limit = 30,
             OrderBy = new[] { (ItemSortBy.Random, SortOrder.Ascending) },
             IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series },
-            TopParentIds = topParentIds ?? Array.Empty<Guid>(),
         };
     }
 
@@ -312,15 +316,36 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
         Generate();
     }
 
-    private List<string> CollectPaths(ImageType imageType, Guid[]? topParentIds)
+    private List<string> CollectPaths(ImageType imageType, Guid[]? allowedLibraryIds)
     {
         if (PathSourceOverride != null)
         {
-            return PathSourceOverride(imageType, topParentIds);
+            return PathSourceOverride(imageType, allowedLibraryIds);
         }
 
-        var manager = _libraryManagerFactory!.Invoke();
-        var items = manager.GetItemList(BuildQuery(imageType, topParentIds));
+        var manager = LibraryManagerOverride?.Invoke() ?? _libraryManagerFactory!.Invoke();
+        var query = BuildQuery(imageType);
+
+        IReadOnlyList<BaseItem> items;
+        if (allowedLibraryIds == null)
+        {
+            items = manager.GetItemList(query);
+        }
+        else
+        {
+            var parents = new List<BaseItem>();
+            foreach (var libraryId in allowedLibraryIds)
+            {
+                var folder = manager.GetItemById(libraryId);
+                if (folder != null)
+                {
+                    parents.Add(folder);
+                }
+            }
+
+            items = parents.Count == 0 ? Array.Empty<BaseItem>() : manager.GetItemList(query, parents);
+        }
+
         var paths = new List<string>(items.Count);
         foreach (var item in items)
         {
