@@ -163,4 +163,16 @@ public class PluginConfiguration : BasePluginConfiguration
     /// MoviePilot API_TOKEN（管理员级 secret，仅保存在本地配置中，不要提交到仓库）。
     /// </summary>
     public string MoviePilotApiToken { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 启动画面媒体库白名单总开关：开启后 Jellyfin 自动生成的启动画面（/Branding/Splashscreen）
+    /// 只会使用白名单媒体库中的电影/剧集海报与横图。默认关闭（保持 core 原始行为）。
+    /// </summary>
+    public bool EnableSplashscreenLibraryFilter { get; set; } = false;
+
+    /// <summary>
+    /// 允许出现在自动启动画面中的媒体库白名单（库名称或库 GUID，分号/逗号/换行分隔）。
+    /// 开启过滤但此处为空或全部无法匹配时，按 fail-safe 不生成启动画面（避免泄露未授权库内容）。
+    /// </summary>
+    public string SplashscreenLibraryWhitelist { get; set; } = string.Empty;
 }
