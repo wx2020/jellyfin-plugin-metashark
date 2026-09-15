@@ -202,5 +202,71 @@ namespace Jellyfin.Plugin.MetaShark.Test
             CollectionAssert.AreEqual(new[] { ImageType.Primary, ImageType.Thumb, ImageType.Backdrop }, calls);
             CollectionAssert.AreEqual(new[] { "from-backdrop" }, gotBackdrops!.ToList());
         }
+
+        [TestMethod]
+        public void Generate_Disabled_UsesUnfilteredSelection()
+        {
+            IReadOnlyList<string>? gotPosters = null;
+            Guid[]? capturedIds = new[] { Guid.NewGuid() };
+            var mock = new Mock<IImageEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.CreateSplashscreen(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<string>>()))
+                .Callback<IReadOnlyList<string>, IReadOnlyList<string>>((p, b) => gotPosters = p);
+
+            var proxy = SplashscreenLibraryFilterProxy.CreateForTest(mock.Object, new NullLogger<SplashscreenLibraryFilterProxy>());
+            var decorator = (SplashscreenLibraryFilterProxy)(object)proxy;
+            decorator.TestConfigOverride = (false, "电影");
+            decorator.PathSourceOverride = (type, ids) =>
+            {
+                capturedIds = ids;
+                return type == ImageType.Primary ? new List<string> { "all-poster" } : new List<string> { "all-thumb" };
+            };
+
+            decorator.Generate();
+
+            Assert.IsNull(capturedIds);
+            CollectionAssert.AreEqual(new[] { "all-poster" }, gotPosters!.ToList());
+        }
+
+        [TestMethod]
+        public void Generate_Enabled_AppliesWhitelist()
+        {
+            Guid[]? capturedIds = null;
+            var mock = new Mock<IImageEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.CreateSplashscreen(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<string>>()));
+
+            var proxy = SplashscreenLibraryFilterProxy.CreateForTest(mock.Object, new NullLogger<SplashscreenLibraryFilterProxy>());
+            var decorator = (SplashscreenLibraryFilterProxy)(object)proxy;
+            decorator.TestConfigOverride = (true, "电影");
+            decorator.FoldersOverride = Folders;
+            decorator.PathSourceOverride = (type, ids) =>
+            {
+                capturedIds = ids;
+                return new List<string> { "allowed" };
+            };
+
+            decorator.Generate();
+
+            CollectionAssert.AreEqual(new[] { MovieLibraryId }, capturedIds);
+            mock.Verify(m => m.CreateSplashscreen(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<string>>()), Times.Once);
+        }
+
+        [TestMethod]
+        public void Generate_EmptyWhitelist_FailsSafeToEmpty()
+        {
+            IReadOnlyList<string>? gotPosters = null;
+            var mock = new Mock<IImageEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.CreateSplashscreen(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<string>>()))
+                .Callback<IReadOnlyList<string>, IReadOnlyList<string>>((p, b) => gotPosters = p);
+
+            var proxy = SplashscreenLibraryFilterProxy.CreateForTest(mock.Object, new NullLogger<SplashscreenLibraryFilterProxy>());
+            var decorator = (SplashscreenLibraryFilterProxy)(object)proxy;
+            decorator.TestConfigOverride = (true, string.Empty);
+            decorator.FoldersOverride = Folders;
+            decorator.PathSourceOverride = (type, ids) => new List<string> { "should-not-be-used" };
+
+            decorator.Generate();
+
+            Assert.AreEqual(0, gotPosters!.Count);
+        }
     }
 }

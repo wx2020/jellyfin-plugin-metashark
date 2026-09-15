@@ -22,6 +22,10 @@ namespace Jellyfin.Plugin.MetaShark.Splashscreen;
 /// 也无法通过插件移除该任务（它由反射 + ActivatorUtilities 实例化）。因此这里在过滤开启时忽略入参，
 /// 用带 <c>TopParentIds</c> 的查询自行取料后交给内层编码器；过滤关闭时原样转发，行为与 core 完全一致。
 /// </para>
+/// <para>
+/// 此外 <see cref="Generate"/> 提供"不等完整库扫描、立即重新生成启动画面"的入口，由
+/// <c>RefreshSplashscreenTask</c> 计划任务调用；core 原有的"扫描媒体库后自动生成"逻辑保留不变。
+/// </para>
 /// </summary>
 public class SplashscreenLibraryFilterProxy : DispatchProxy
 {
@@ -42,7 +46,7 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
     /// <summary>
     /// 测试用取料覆盖。
     /// </summary>
-    internal Func<ImageType, Guid[], List<string>>? PathSourceOverride { get; set; }
+    internal Func<ImageType, Guid[]?, List<string>>? PathSourceOverride { get; set; }
 
     /// <summary>
     /// 用装饰器包装已有的 <c>IImageEncoder</c> 实例。
@@ -68,6 +72,10 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
     /// <summary>
     /// 把容器中已注册的 <c>IImageEncoder</c> 替换为白名单过滤装饰版本
     /// （插件 ServiceRegistrator 在 core 注册之后执行）。
+    /// <para>
+    /// 同时以具体类型 <see cref="SplashscreenLibraryFilterProxy"/> 注册同一个实例，
+    /// 供"刷新启动画面"计划任务注入并直接调用 <see cref="Generate"/>。
+    /// </para>
     /// </summary>
     /// <param name="services">服务集合。</param>
     public static void Decorate(IServiceCollection services)
@@ -90,18 +98,20 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
 
         services.Remove(innerDescriptor);
         var captured = innerDescriptor;
-        services.AddSingleton<IImageEncoder>((sp) =>
+        services.AddSingleton<SplashscreenLibraryFilterProxy>((sp) =>
         {
             IImageEncoder inner =
                 captured.ImplementationInstance as IImageEncoder
                 ?? (captured.ImplementationFactory != null
                     ? (IImageEncoder)captured.ImplementationFactory(sp)
                     : (IImageEncoder)ActivatorUtilities.CreateInstance(sp, captured.ImplementationType!));
-            return Create(
+            var encoder = Create(
                 inner,
                 () => sp.GetRequiredService<ILibraryManager>(),
                 sp.GetRequiredService<ILogger<SplashscreenLibraryFilterProxy>>());
+            return (SplashscreenLibraryFilterProxy)(object)encoder;
         });
+        services.AddSingleton<IImageEncoder>(sp => sp.GetRequiredService<SplashscreenLibraryFilterProxy>());
     }
 
     /// <summary>
@@ -189,13 +199,14 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
     }
 
     /// <summary>
-    /// 构造与 core <c>SplashscreenPostScanTask</c> 同款的取料查询，额外用 <c>TopParentIds</c> 限制到白名单库。
+    /// 构造与 core <c>SplashscreenPostScanTask</c> 同款的取料查询；<paramref name="topParentIds"/>
+    /// 非空时用 <c>TopParentIds</c> 限制到白名单库，为 null 时不限库（用于"刷新启动画面"任务在过滤关闭时的路径）。
     /// 刻意不设 <c>MaxParentalRating</c>：只认白名单，避免"未分级放行"导致白名单内容被误滤。
     /// </summary>
     /// <param name="imageType">图片类型。</param>
-    /// <param name="topParentIds">允许的库 ID。</param>
+    /// <param name="topParentIds">允许的库 ID；null 表示不限库。</param>
     /// <returns>查询对象。</returns>
-    internal static InternalItemsQuery BuildQuery(ImageType imageType, Guid[] topParentIds)
+    internal static InternalItemsQuery BuildQuery(ImageType imageType, Guid[]? topParentIds)
     {
         return new InternalItemsQuery
         {
@@ -206,8 +217,58 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
             Limit = 30,
             OrderBy = new[] { (ItemSortBy.Random, SortOrder.Ascending) },
             IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series },
-            TopParentIds = topParentIds,
+            TopParentIds = topParentIds ?? Array.Empty<Guid>(),
         };
+    }
+
+    /// <summary>
+    /// 立即按当前配置重新生成启动画面（供"刷新启动画面"计划任务调用，无需跑完整库扫描）。
+    /// 过滤开启时只取白名单库图片（空白名单 fail-safe 不生成）；关闭时取全库图片（core 同款选料）。
+    /// </summary>
+    public void Generate()
+    {
+        var (enabled, raw) = ResolveConfig();
+        Guid[]? allowed = null;
+        if (enabled)
+        {
+            var folders = FoldersOverride?.Invoke()
+                ?? _libraryManagerFactory?.Invoke().GetVirtualFolders()
+                ?? new List<VirtualFolderInfo>();
+            allowed = ResolveWhitelist(raw, folders);
+            if (allowed.Length == 0)
+            {
+                _logger.LogInformation(
+                    "启动画面媒体库白名单为空或全部无法匹配（配置：{Raw}），按 fail-safe 不生成启动画面",
+                    raw);
+                _inner.CreateSplashscreen(Array.Empty<string>(), Array.Empty<string>());
+                return;
+            }
+        }
+
+        var posters = CollectPaths(ImageType.Primary, allowed);
+        var backdrops = CollectPaths(ImageType.Thumb, allowed);
+        if (backdrops.Count == 0)
+        {
+            backdrops = CollectPaths(ImageType.Backdrop, allowed);
+        }
+
+        if (enabled)
+        {
+            _logger.LogInformation(
+                "启动画面媒体库白名单生效：允许 {LibraryCount} 个库，海报 {PosterCount} 张、横图 {BackdropCount} 张",
+                allowed!.Length,
+                posters.Count,
+                backdrops.Count);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "启动画面已刷新：海报 {PosterCount} 张、横图 {BackdropCount} 张",
+                posters.Count,
+                backdrops.Count);
+        }
+
+        _inner.CreateSplashscreen(posters, backdrops);
     }
 
     /// <inheritdoc />
@@ -225,57 +286,33 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
         return targetMethod!.Invoke(_inner, args);
     }
 
-    private void InterceptCreateSplashscreen(IReadOnlyList<string> posters, IReadOnlyList<string> backdrops)
+    private (bool Enabled, string Raw) ResolveConfig()
     {
-        bool enabled;
-        string raw;
         if (TestConfigOverride.HasValue)
         {
-            enabled = TestConfigOverride.Value.Enabled;
-            raw = TestConfigOverride.Value.Raw ?? string.Empty;
-        }
-        else
-        {
-            var config = Plugin.Instance?.Configuration;
-            enabled = config?.EnableSplashscreenLibraryFilter ?? false;
-            raw = config?.SplashscreenLibraryWhitelist ?? string.Empty;
+            return (TestConfigOverride.Value.Enabled, TestConfigOverride.Value.Raw ?? string.Empty);
         }
 
+        var config = Plugin.Instance?.Configuration;
+        return (
+            config?.EnableSplashscreenLibraryFilter ?? false,
+            config?.SplashscreenLibraryWhitelist ?? string.Empty);
+    }
+
+    private void InterceptCreateSplashscreen(IReadOnlyList<string> posters, IReadOnlyList<string> backdrops)
+    {
+        var (enabled, _) = ResolveConfig();
         if (!enabled)
         {
             _inner.CreateSplashscreen(posters, backdrops);
             return;
         }
 
-        var folders = FoldersOverride?.Invoke()
-            ?? _libraryManagerFactory?.Invoke().GetVirtualFolders()
-            ?? new List<VirtualFolderInfo>();
-        var allowed = ResolveWhitelist(raw, folders);
-        if (allowed.Length == 0)
-        {
-            _logger.LogInformation(
-                "启动画面媒体库白名单为空或全部无法匹配（配置：{Raw}），按 fail-safe 不生成启动画面",
-                raw);
-            _inner.CreateSplashscreen(Array.Empty<string>(), Array.Empty<string>());
-            return;
-        }
-
-        var allowedPosters = CollectPaths(ImageType.Primary, allowed);
-        var allowedBackdrops = CollectPaths(ImageType.Thumb, allowed);
-        if (allowedBackdrops.Count == 0)
-        {
-            allowedBackdrops = CollectPaths(ImageType.Backdrop, allowed);
-        }
-
-        _logger.LogInformation(
-            "启动画面媒体库白名单生效：允许 {LibraryCount} 个库，海报 {PosterCount} 张、横图 {BackdropCount} 张",
-            allowed.Length,
-            allowedPosters.Count,
-            allowedBackdrops.Count);
-        _inner.CreateSplashscreen(allowedPosters, allowedBackdrops);
+        // 过滤开启时忽略 core 传入的图片路径，按白名单重新取料。
+        Generate();
     }
 
-    private List<string> CollectPaths(ImageType imageType, Guid[] topParentIds)
+    private List<string> CollectPaths(ImageType imageType, Guid[]? topParentIds)
     {
         if (PathSourceOverride != null)
         {
