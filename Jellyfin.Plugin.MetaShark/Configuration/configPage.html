@@ -255,6 +255,25 @@
                             <div class="fieldDescription">扁平布局剧集无季文件夹时按 S01 归位，并在每次扫描后自动重绑未挂季的集；纯本地无网络。默认开启</div>
                         </div>
                     </fieldset>
+                    <fieldset class="verticalSection verticalSection-extrabottompadding">
+                        <legend>
+                            <h3>启动画面</h3>
+                        </legend>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableSplashscreenLibraryFilter">
+                                <input id="EnableSplashscreenLibraryFilter" name="EnableSplashscreenLibraryFilter"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>启动画面只用白名单媒体库</span>
+                            </label>
+                            <div class="fieldDescription">开启后 Jellyfin 自动生成的启动画面（登录页背景）只使用下列媒体库的电影/剧集图片；白名单为空时不生成。默认关闭</div>
+                        </div>
+                        <div class="inputContainer splashfilter-child">
+                            <label class="inputLabel inputLabelUnfocused" for="SplashscreenLibraryWhitelist">媒体库白名单</label>
+                            <input id="SplashscreenLibraryWhitelist" name="SplashscreenLibraryWhitelist" type="text"
+                                is="emby-input" placeholder="电影;电视剧" />
+                            <div class="fieldDescription">库名称或库 GUID，分号/逗号分隔；留空则不生成启动画面。保存后可运行计划任务「刷新启动画面」立即生效（无需完整扫描）</div>
+                        </div>
+                    </fieldset>
                     <button is="emby-button" type="submit" class="raised button-submit block emby-button">
                         <span>Save</span>
                     </button>
@@ -306,6 +325,8 @@
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
                         document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked = config.EnableSkipOnlineMetadataOnPlaybackInfo === true;
                         document.querySelector('#EnableVirtualSeasonOrphanFix').checked = config.EnableVirtualSeasonOrphanFix !== false;
+                        document.querySelector('#EnableSplashscreenLibraryFilter').checked = config.EnableSplashscreenLibraryFilter === true;
+                        document.querySelector('#SplashscreenLibraryWhitelist').value = config.SplashscreenLibraryWhitelist || '';
 
                         changeProxyDisplay();
                         checkDoubanLogin();
@@ -316,11 +337,13 @@
                         changeStrmRedirectDisplay();
                         changeStrmProbeDisplay();
                         changeMoviePilotDisplay();
+                        changeSplashFilterDisplay();
                         setTimeout(function () {
                             ensureNativeControlsEnhanced();
                             changeStrmRedirectDisplay();
                             changeStrmProbeDisplay();
                             changeMoviePilotDisplay();
+                            changeSplashFilterDisplay();
                         }, 0);
 
                         Dashboard.hideLoadingMsg();
@@ -363,6 +386,8 @@
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
                         config.EnableSkipOnlineMetadataOnPlaybackInfo = document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked;
                         config.EnableVirtualSeasonOrphanFix = document.querySelector('#EnableVirtualSeasonOrphanFix').checked;
+                        config.EnableSplashscreenLibraryFilter = document.querySelector('#EnableSplashscreenLibraryFilter').checked;
+                        config.SplashscreenLibraryWhitelist = document.querySelector('#SplashscreenLibraryWhitelist').value;
                         ApiClient.updatePluginConfiguration(TemplateConfig.pluginUniqueId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
 
@@ -394,6 +419,11 @@
                     changeMoviePilotDisplay();
                 });
 
+            document.querySelector('#EnableSplashscreenLibraryFilter')
+                .addEventListener('change', function (e) {
+                    changeSplashFilterDisplay();
+                });
+
 
             function changeStrmRedirectDisplay() {
                 let enabled = document.querySelector('#EnableStrmDirectRedirect').checked;
@@ -414,6 +444,14 @@
             function changeMoviePilotDisplay() {
                 let enabled = document.querySelector('#EnableMoviePilot').checked;
                 document.querySelectorAll('.moviepilot-child').forEach(function (el) {
+                    el.style.opacity = enabled ? '1' : '0.5';
+                    el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
+                });
+            }
+
+            function changeSplashFilterDisplay() {
+                let enabled = document.querySelector('#EnableSplashscreenLibraryFilter').checked;
+                document.querySelectorAll('.splashfilter-child').forEach(function (el) {
                     el.style.opacity = enabled ? '1' : '0.5';
                     el.querySelectorAll('input').forEach(function (input) { input.disabled = !enabled; });
                 });
