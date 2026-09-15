@@ -111,7 +111,7 @@ public class SplashscreenLibraryFilterProxy : DispatchProxy
                 sp.GetRequiredService<ILogger<SplashscreenLibraryFilterProxy>>());
             return (SplashscreenLibraryFilterProxy)(object)encoder;
         });
-        services.AddSingleton<IImageEncoder>(sp => sp.GetRequiredService<SplashscreenLibraryFilterProxy>());
+        services.AddSingleton<IImageEncoder>(sp => (IImageEncoder)sp.GetRequiredService<SplashscreenLibraryFilterProxy>());
     }
 
     /// <summary>
