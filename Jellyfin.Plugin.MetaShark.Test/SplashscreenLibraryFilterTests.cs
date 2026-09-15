@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.MetaShark.Splashscreen;
 using MediaBrowser.Controller.Drawing;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -80,20 +84,50 @@ namespace Jellyfin.Plugin.MetaShark.Test
         }
 
         [TestMethod]
-        public void BuildQuery_UsesTopParentIdsAndNoParentalRatingFilter()
+        public void BuildQuery_MatchesCoreSelectionWithoutParentalRatingOrTopParentFilter()
         {
-            var query = SplashscreenLibraryFilterProxy.BuildQuery(ImageType.Primary, new[] { MovieLibraryId });
+            var query = SplashscreenLibraryFilterProxy.BuildQuery(ImageType.Primary);
 
             Assert.AreEqual(true, query.Recursive);
             Assert.AreEqual(false, query.CollapseBoxSetItems);
             Assert.AreEqual(30, query.Limit);
             Assert.IsNull(query.MaxParentalRating);
-            CollectionAssert.AreEqual(new[] { MovieLibraryId }, query.TopParentIds);
+            Assert.AreEqual(0, query.TopParentIds.Length);
             CollectionAssert.AreEqual(new[] { ImageType.Primary }, query.ImageTypes);
             CollectionAssert.AreEqual(new[] { BaseItemKind.Movie, BaseItemKind.Series }, query.IncludeItemTypes);
             Assert.AreEqual(1, query.OrderBy.Count);
             Assert.AreEqual(ItemSortBy.Random, query.OrderBy[0].OrderBy);
             Assert.AreEqual(SortOrder.Ascending, query.OrderBy[0].SortOrder);
+        }
+
+        [TestMethod]
+        public void Generate_Enabled_QueriesByCollectionFolderParents()
+        {
+            // 回归：白名单库必须经 ILibraryManager.GetItemList(query, parents) 查询，
+            // 由 core 把 CollectionFolder 解析成 PhysicalFolderIds；直接写 TopParentIds=CollectionFolder.Id 会查不到任何条目。
+            var folder = (BaseItem)RuntimeHelpers.GetUninitializedObject(typeof(Movie));
+            var manager = new Mock<ILibraryManager>(MockBehavior.Strict);
+            manager.Setup(m => m.GetItemById(MovieLibraryId)).Returns(folder);
+            manager.Setup(m => m.GetItemList(It.IsAny<InternalItemsQuery>(), It.IsAny<List<BaseItem>>()))
+                .Returns(new List<BaseItem>());
+
+            var mock = new Mock<IImageEncoder>(MockBehavior.Strict);
+            mock.Setup(m => m.CreateSplashscreen(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<string>>()));
+
+            var proxy = SplashscreenLibraryFilterProxy.CreateForTest(mock.Object, new NullLogger<SplashscreenLibraryFilterProxy>());
+            var decorator = (SplashscreenLibraryFilterProxy)(object)proxy;
+            decorator.TestConfigOverride = (true, "电影");
+            decorator.FoldersOverride = Folders;
+            decorator.LibraryManagerOverride = () => manager.Object;
+
+            decorator.Generate();
+
+            // Primary + Thumb + Backdrop 回退各一次，均走 parents 重载（strict mock 未注册单参重载，调用即抛）。
+            manager.Verify(m => m.GetItemById(MovieLibraryId), Times.Exactly(3));
+            manager.Verify(
+                m => m.GetItemList(It.IsAny<InternalItemsQuery>(), It.IsAny<List<BaseItem>>()),
+                Times.Exactly(3));
+            mock.Verify(m => m.CreateSplashscreen(It.IsAny<IReadOnlyList<string>>(), It.IsAny<IReadOnlyList<string>>()), Times.Once);
         }
 
         [TestMethod]
