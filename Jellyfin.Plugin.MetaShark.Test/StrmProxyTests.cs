@@ -137,7 +137,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var service = NewTokenService();
             var now = DateTime.UtcNow;
             Assert.IsTrue(service.TryCreateTicket(ItemId, now, out var exp, out var sig));
-            Assert.AreEqual(now.Add(StrmProbeConstants.StrmProxyTicketTtl).ToUnixTimeSeconds(), exp);
+            Assert.AreEqual(StrmProxyTokenService.ToUnixSeconds(now.Add(StrmProbeConstants.StrmProxyTicketTtl)), exp);
             Assert.IsTrue(service.Validate(ItemId, exp.ToString(), sig, now));
         }
 

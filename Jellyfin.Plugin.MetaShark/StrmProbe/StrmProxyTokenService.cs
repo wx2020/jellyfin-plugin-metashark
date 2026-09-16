@@ -48,7 +48,7 @@ public sealed class StrmProxyTokenService
                 return false;
             }
 
-            var expires = nowUtc.Add(StrmProbeConstants.StrmProxyTicketTtl).ToUnixTimeSeconds();
+            var expires = ToUnixSeconds(nowUtc.Add(StrmProbeConstants.StrmProxyTicketTtl));
             if (expires <= 0)
             {
                 return false;
@@ -104,6 +104,16 @@ public sealed class StrmProxyTokenService
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// UTC 时间转 Unix 秒（DateTime.ToUnixTimeSeconds 只存在于 DateTimeOffset）。
+    /// </summary>
+    /// <param name="utc">UTC 时间。</param>
+    /// <returns>Unix 秒。</returns>
+    internal static long ToUnixSeconds(DateTime utc)
+    {
+        return (long)(utc - DateTime.UnixEpoch).TotalSeconds;
     }
 
     /// <summary>
