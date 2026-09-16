@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MetaShark.ScheduledTasks;
@@ -568,6 +569,7 @@ namespace Jellyfin.Plugin.MetaShark.Test
             services.AddLogging();
             // core 必然注册 IImageEncoder；先放一个 stub，供插件的 SplashscreenLibraryFilterProxy.Decorate 包装。
             services.AddSingleton(new Mock<IImageEncoder>().Object);
+            services.AddSingleton<IHttpClientFactory>(new DefaultHttpClientFactory());
 
             new ServiceRegistrator().RegisterServices(
                 services,
@@ -597,6 +599,12 @@ namespace Jellyfin.Plugin.MetaShark.Test
             var refresh = ActivatorUtilities.CreateInstance<RefreshSplashscreenTask>(provider);
             Assert.IsNotNull(refresh);
             Assert.AreSame(provider.GetRequiredService<IImageEncoder>(), provider.GetRequiredService<SplashscreenLibraryFilterProxy>());
+
+            // MetaShark 代理源：provider/票据服务/控制器都必须可解析（core 反射发现 IMediaSourceProvider）。
+            Assert.IsNotNull(provider.GetServices<MediaBrowser.Controller.Library.IMediaSourceProvider>().OfType<StrmProxyMediaSourceProvider>().SingleOrDefault());
+            Assert.IsNotNull(provider.GetRequiredService<StrmProxyTokenService>());
+            var proxyController = ActivatorUtilities.CreateInstance<Jellyfin.Plugin.MetaShark.Controllers.StrmProxyController>(provider);
+            Assert.IsNotNull(proxyController);
 
             // hosted service 与任务注入的 warmup 必须是同一实例（共享并发闸门与 ItemAdded 订阅）。
             var warmup = provider.GetRequiredService<StrmProbeWarmupService>();

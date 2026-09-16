@@ -21,6 +21,33 @@ public static class StrmClientResolver
     public const string AuthorizationInfoItemsKey = "AuthorizationInfo";
 
     /// <summary>
+    /// core 10.11 认证链写入的客户端名 claim（api_key 认证同样回填）。
+    /// </summary>
+    public const string ClientClaimType = "Jellyfin-Client";
+
+    /// <summary>
+    /// 解析当前请求客户端名称：优先已认证用户 claims（core 10.11 认证链写入），再回退请求头/Items。
+    /// 解析不到返回 null（调用方按未知客户端=原生处理）。
+    /// </summary>
+    /// <param name="httpContext">当前 HTTP 上下文（可为空）。</param>
+    /// <returns>客户端名称或 null。</returns>
+    public static string? Resolve(HttpContext? httpContext)
+    {
+        if (httpContext == null)
+        {
+            return null;
+        }
+
+        var claim = httpContext.User?.FindFirst(ClientClaimType)?.Value;
+        if (!string.IsNullOrWhiteSpace(claim))
+        {
+            return claim.Trim();
+        }
+
+        return Resolve(httpContext.Request, httpContext.Items);
+    }
+
+    /// <summary>
     /// 解析当前请求客户端名称。解析不到返回 null（调用方按未知客户端=原生处理）。
     /// </summary>
     /// <param name="request">当前 HTTP 请求（可为空）。</param>

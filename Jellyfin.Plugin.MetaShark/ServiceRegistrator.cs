@@ -43,6 +43,17 @@ namespace Jellyfin.Plugin.MetaShark
             // 取流 302 直跳：全局 ActionFilter（鉴权之后执行），只劫白名单客户端的纯静态取流，其余全部放行。
             serviceCollection.AddTransient<StrmDirectRedirectFilter>();
             serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<StrmDirectRedirectFilter>());
+            // MetaShark 代理源票据服务：HMAC 密钥落 DataPath（首次自动生成），惰性读取。
+            serviceCollection.AddSingleton<StrmProxyTokenService>((ctx) =>
+            {
+                var appPaths = ctx.GetRequiredService<IApplicationPaths>();
+                var logger = ctx.GetRequiredService<ILogger<StrmProxyTokenService>>();
+                string? cached = null;
+                var secretPath = Path.Combine(appPaths.DataPath, "metashark", StrmProbeConstants.StrmProxySecretFileName);
+                return new StrmProxyTokenService(() => cached ??= StrmProxySecretStore.LoadOrCreate(secretPath, logger));
+            });
+            // MetaShark 代理源：只新增虚拟源，白名单门控；原生源与 302 直跳行为不变。
+            serviceCollection.AddSingleton<IMediaSourceProvider, StrmProxyMediaSourceProvider>();
             serviceCollection.AddSingleton<IMediaInfoProbeCacheStore>((ctx) =>
             {
                 var appPaths = ctx.GetRequiredService<IApplicationPaths>();

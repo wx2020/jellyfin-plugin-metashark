@@ -144,6 +144,13 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableStrmDirectRedirect { get; set; } = false;
 
     /// <summary>
+    /// MetaShark 代理源：为白名单第三方客户端在 .strm 条目的 PlaybackInfo 中额外提供一个「MetaShark 代理」
+    /// 虚拟 MediaSource（Id 由缓存 key 派生确定性 Guid，Path 指向插件签名端点，服务端按 Range 中转直链字节）。
+    /// 虚拟源仅作备用，纯静态直放可手动切换；转码/混流一律回退原生源。默认关闭。
+    /// </summary>
+    public bool EnableStrmProxySource { get; set; } = false;
+
+    /// <summary>
     /// 已刮削 strm 条目（电影/剧集）在 PlaybackInfo（详情页）触发的刷新中短路元数据提供者：不再查询豆瓣/TMDB，
     /// 直接返回空结果由 core 保留库内数据。仅作用于 PlaybackInfo 路径，手动刷新元数据不受影响。默认关闭。
     /// </summary>

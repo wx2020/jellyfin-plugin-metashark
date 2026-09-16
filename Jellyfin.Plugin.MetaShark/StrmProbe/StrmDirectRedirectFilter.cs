@@ -56,6 +56,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
 
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
+    private readonly StrmProxyTokenService _tokenService;
     private readonly ILogger<StrmDirectRedirectFilter> _logger;
 
     /// <summary>
@@ -64,14 +65,17 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
     /// </summary>
     /// <param name="libraryManager">媒体库（按 Id 取条目）。</param>
     /// <param name="userManager">用户管理（鉴权用户回查）。</param>
+    /// <param name="tokenService">代理源票据服务（虚拟源分流用）。</param>
     /// <param name="logger">日志。</param>
     public StrmDirectRedirectFilter(
         ILibraryManager libraryManager,
         IUserManager userManager,
+        StrmProxyTokenService tokenService,
         ILogger<StrmDirectRedirectFilter> logger)
     {
         _libraryManager = libraryManager ?? throw new ArgumentNullException(nameof(libraryManager));
         _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+        _tokenService = tokenService ?? throw new ArgumentNullException(nameof(tokenService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -98,6 +102,22 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
             return;
         }
 
+        // 带转码/混流参数的代理源请求：不劫持，改写 mediaSourceId 强制回退原生源。
+        if (decision.RewriteMediaSourceId.HasValue)
+        {
+            if (context.ActionArguments.ContainsKey("mediaSourceId"))
+            {
+                context.ActionArguments["mediaSourceId"] = decision.RewriteMediaSourceId.Value.ToString("D");
+                _logger.LogInformation(
+                    "strm 代理源转码请求回退原生源 client={Client} item={Item}",
+                    decision.ClientName,
+                    decision.ItemName);
+            }
+
+            await next().ConfigureAwait(false);
+            return;
+        }
+
         _logger.LogInformation(
             "strm 取流 302 直跳 client={Client} item={Item} source={Source} target={Target}",
             decision.ClientName,
@@ -116,7 +136,7 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
     internal RedirectDecision? TryResolveTarget(ActionExecutingContext context)
     {
         var config = Plugin.Instance?.Configuration;
-        if (config == null || !config.EnableStrmDirectRedirect)
+        if (config == null || (!config.EnableStrmDirectRedirect && !config.EnableStrmProxySource))
         {
             return null;
         }
@@ -158,6 +178,21 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
             return null;
         }
 
+        // 代理源开启时，虚拟源请求分流到签名端点（票据就地下发）。
+        Func<string>? proxyUrlFactory = null;
+        if (config.EnableStrmProxySource)
+        {
+            proxyUrlFactory = () =>
+            {
+                if (!_tokenService.TryCreateTicket(itemId, DateTime.UtcNow, out var expiresAtUnix, out var signatureValue))
+                {
+                    return string.Empty;
+                }
+
+                return StrmProxyUrl.BuildAbsoluteUrl(httpContext.Request, itemId, expiresAtUnix, signatureValue);
+            };
+        }
+
         var decision = Decide(
             method,
             controllerName,
@@ -168,7 +203,10 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
             itemId,
             url,
             fileSize,
-            signature);
+            signature,
+            config.EnableStrmProxySource,
+            proxyUrlFactory,
+            config.EnableStrmDirectRedirect);
         if (decision != null)
         {
             decision.ItemName = item.Name;
@@ -190,6 +228,9 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
     /// <param name="strmUrl">实时读出的 .strm 直链。</param>
     /// <param name="fileSize">strm 文件大小。</param>
     /// <param name="signature">strm 文件 mtime 签名。</param>
+    /// <param name="proxyEnabled">是否开启 MetaShark 代理源。</param>
+    /// <param name="proxyUrlFactory">代理源签名端点 URL 工厂（代理源开启时提供）。</param>
+    /// <param name="directRedirectEnabled">是否开启 302 直链跳转（原生源行为开关）。</param>
     /// <returns>直跳决策或 null。</returns>
     internal static RedirectDecision? Decide(
         string? method,
@@ -201,7 +242,10 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         Guid itemId,
         string? strmUrl,
         long fileSize,
-        string signature)
+        string signature,
+        bool proxyEnabled = false,
+        Func<string>? proxyUrlFactory = null,
+        bool directRedirectEnabled = true)
     {
         if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase))
@@ -219,11 +263,6 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         if (args == null
             || !args.TryGetValue("static", out var staticValue)
             || !(staticValue is true))
-        {
-            return null;
-        }
-
-        if (HasTranscodeArgs(args))
         {
             return null;
         }
@@ -246,14 +285,46 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         var requested = args.TryGetValue("mediaSourceId", out var mediaSourceValue)
             ? mediaSourceValue?.ToString()
             : null;
-        var virtualId = DeriveStableId(ComputeKey(strmUrl!, fileSize, signature));
-        if (!MediaSourceIdMatches(requested, itemId, virtualId))
+        var virtualId = StrmSourceKey.DeriveStableId(StrmSourceKey.Compute(strmUrl, fileSize, signature));
+        var nativeMatch = IsNativeId(requested, itemId);
+        var proxyMatch = IsProxyId(requested, virtualId);
+        if (!nativeMatch && !proxyMatch)
         {
             return null;
         }
 
-        var kind = IsNativeId(requested, itemId) ? "native" : "virtual";
-        return new RedirectDecision(strmUrl!, clientName, string.Empty, kind);
+        // 纯静态直放：原生源行为不变（跳直链），代理源分流到签名端点。
+        if (!HasTranscodeArgs(args))
+        {
+            if (nativeMatch && directRedirectEnabled)
+            {
+                return new RedirectDecision(strmUrl!, clientName, string.Empty, "native");
+            }
+
+            if (proxyMatch && proxyEnabled && proxyUrlFactory != null)
+            {
+                var proxyUrl = proxyUrlFactory();
+                if (!string.IsNullOrWhiteSpace(proxyUrl))
+                {
+                    return new RedirectDecision(proxyUrl, clientName, string.Empty, "proxy");
+                }
+            }
+
+            if (proxyMatch && directRedirectEnabled)
+            {
+                return new RedirectDecision(strmUrl!, clientName, string.Empty, "virtual");
+            }
+
+            return null;
+        }
+
+        // 带转码/混流参数：代理源不参与，强制回退原生源（改写 mediaSourceId，行为同原生管道）。
+        if (proxyMatch && proxyEnabled)
+        {
+            return RedirectDecision.ForNativeRewrite(itemId, clientName);
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -275,22 +346,11 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
 
     /// <summary>
     /// mediaSourceId 是否为本条目的原生 Id 或虚拟 Guid（大小写/连字符不敏感）。
-    /// 虚拟源已随直跳下线，此处保留对历史虚拟 Id 的识别仅为升级过渡期兼容（避免在途会话取流 400）。
+    /// 虚拟 Guid 现对应 MetaShark 代理源，保留识别以做按源分流与升级过渡期兼容。
     /// </summary>
     internal static bool MediaSourceIdMatches(string? requested, Guid itemId, string virtualIdN)
     {
-        if (string.IsNullOrWhiteSpace(requested))
-        {
-            return false;
-        }
-
-        var norm = requested.Trim().Replace("-", string.Empty, StringComparison.Ordinal);
-        if (string.Equals(norm, itemId.ToString("N"), StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return string.Equals(norm, virtualIdN, StringComparison.OrdinalIgnoreCase);
+        return IsNativeId(requested, itemId) || IsProxyId(requested, virtualIdN);
     }
 
     internal static bool IsNativeId(string? requested, Guid itemId)
@@ -303,6 +363,22 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
         return string.Equals(
             requested.Trim().Replace("-", string.Empty, StringComparison.Ordinal),
             itemId.ToString("N"),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// mediaSourceId 是否为缓存 key 派生的代理源确定性 Guid（大小写/连字符不敏感）。
+    /// </summary>
+    internal static bool IsProxyId(string? requested, string proxyIdN)
+    {
+        if (string.IsNullOrWhiteSpace(requested) || string.IsNullOrWhiteSpace(proxyIdN))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            requested.Trim().Replace("-", string.Empty, StringComparison.Ordinal),
+            proxyIdN,
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -323,29 +399,15 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
     /// </summary>
     internal static string ComputeKey(string url, long fileSize, string signature)
     {
-        var normalizedUrl = (url ?? string.Empty).Trim();
-        var normalizedSig = (signature ?? string.Empty).Trim();
-        var raw = normalizedUrl + "\n" + fileSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n" + normalizedSig;
-        var bytes = System.Text.Encoding.UTF8.GetBytes(raw);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-        var sb = new System.Text.StringBuilder(hash.Length * 2);
-        foreach (var b in hash)
-        {
-            sb.Append(b.ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
-        }
-
-        return sb.ToString();
+        return StrmSourceKey.Compute(url, fileSize, signature);
     }
 
     /// <summary>
-    /// 由缓存 key 派生确定性 Guid 形式 Id（MD5→"N" 32 位，与历史虚拟源口径一致，
-    /// 保证升级过渡期在途会话持有的旧虚拟 Id 仍可被识别）。
+    /// 由缓存 key 派生确定性 Guid 形式 Id（MD5→"N" 32 位，与历史虚拟源口径一致）。
     /// </summary>
     internal static string DeriveStableId(string key)
     {
-        using var md5 = System.Security.Cryptography.MD5.Create();
-        var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(key ?? string.Empty));
-        return new Guid(hash).ToString("N");
+        return StrmSourceKey.DeriveStableId(key);
     }
 
     internal static bool HasTranscodeArgs(IDictionary<string, object?> args)
@@ -460,26 +522,47 @@ public sealed class StrmDirectRedirectFilter : IAsyncActionFilter
 
 /// <summary>
 /// 直跳决策：目标直链 + 诊断信息（日志用，不含 sign 原文）。
+/// 另一种形态是"回退原生源"：不改写响应，只把 <c>mediaSourceId</c> 改回原生 Id（<see cref="RewriteMediaSourceId"/>）。
 /// </summary>
 internal sealed class RedirectDecision
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RedirectDecision"/> class.
-    /// </summary>
-    /// <param name="targetUrl">跳转目标直链。</param>
-    /// <param name="clientName">客户端名称。</param>
-    /// <param name="itemName">条目名称（解析时回填）。</param>
-    /// <param name="sourceKind">源种类：native 或 virtual。</param>
-    public RedirectDecision(string targetUrl, string? clientName, string itemName, string sourceKind)
+    private RedirectDecision(string targetUrl, Guid? rewriteMediaSourceId, string? clientName, string itemName, string sourceKind)
     {
         TargetUrl = targetUrl;
+        RewriteMediaSourceId = rewriteMediaSourceId;
         ClientName = clientName;
         ItemName = itemName;
         SourceKind = sourceKind;
     }
 
-    /// <summary>Gets 跳转目标直链。</summary>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RedirectDecision"/> class（跳转形态）。
+    /// </summary>
+    /// <param name="targetUrl">跳转目标直链。</param>
+    /// <param name="clientName">客户端名称。</param>
+    /// <param name="itemName">条目名称（解析时回填）。</param>
+    /// <param name="sourceKind">源种类：native / virtual / proxy。</param>
+    public RedirectDecision(string targetUrl, string? clientName, string itemName, string sourceKind)
+        : this(targetUrl, null, clientName, itemName, sourceKind)
+    {
+    }
+
+    /// <summary>
+    /// 构造"回退原生源"决策：改写请求的 <c>mediaSourceId</c> 为原生条目 Id，继续原生管道。
+    /// </summary>
+    /// <param name="itemId">原生条目 Id。</param>
+    /// <param name="clientName">客户端名称。</param>
+    /// <returns>决策。</returns>
+    public static RedirectDecision ForNativeRewrite(Guid itemId, string? clientName)
+    {
+        return new RedirectDecision(string.Empty, itemId, clientName, string.Empty, "native");
+    }
+
+    /// <summary>Gets 跳转目标直链（回退原生源形态为空串）。</summary>
     public string TargetUrl { get; }
+
+    /// <summary>Gets 需改写成的原生 mediaSourceId（非空表示回退原生源，不做跳转）。</summary>
+    public Guid? RewriteMediaSourceId { get; }
 
     /// <summary>Gets 客户端名称。</summary>
     public string? ClientName { get; }
@@ -487,6 +570,6 @@ internal sealed class RedirectDecision
     /// <summary>Gets or sets 条目名称。</summary>
     public string ItemName { get; set; }
 
-    /// <summary>Gets 源种类：native 或 virtual。</summary>
+    /// <summary>Gets 源种类：native / virtual / proxy。</summary>
     public string SourceKind { get; }
 }
