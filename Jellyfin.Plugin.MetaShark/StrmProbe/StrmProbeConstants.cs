@@ -21,4 +21,10 @@ public static class StrmProbeConstants
 
     /// <summary>入库真探去抖延迟：新增条目入库后等待刮削完成再做完整远程探测。</summary>
     public static readonly TimeSpan LibraryRefreshDebounce = TimeSpan.FromMinutes(5);
+
+    /// <summary>MetaShark 代理源签名票据有效期。票据只用于同一服务端内的取流放行，长于一次播放即可。</summary>
+    public static readonly TimeSpan StrmProxyTicketTtl = TimeSpan.FromHours(12);
+
+    /// <summary>MetaShark 代理源签名密钥文件名（插件自带，落 DataPath/metashark 下，不碰服务端配置）。</summary>
+    public const string StrmProxySecretFileName = "metashark-strm-proxy-secret.key";
 }

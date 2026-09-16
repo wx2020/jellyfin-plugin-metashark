@@ -213,6 +213,14 @@
                             <div class="fieldDescription">名单内客户端才启用；官方与未知客户端不生效。逗号/分号/换行分隔，默认 Yamby</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label" for="EnableStrmProxySource">
+                                <input id="EnableStrmProxySource" name="EnableStrmProxySource"
+                                    type="checkbox" is="emby-checkbox" />
+                                <span>MetaShark 代理源（备用）</span>
+                            </label>
+                            <div class="fieldDescription">为名单内客户端额外提供一个「MetaShark 代理」源：服务端按 Range 中转 .strm 直链，签名链接匿名可用；播放器无法跟随直链跳转时可手动切换。默认关闭；转码/混流仍走原生源</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label" for="EnableStrmProbeLibraryRefresh">
                                 <input id="EnableStrmProbeLibraryRefresh" name="EnableStrmProbeLibraryRefresh"
                                     type="checkbox" is="emby-checkbox" />
@@ -323,6 +331,7 @@
                         document.querySelector('#StrmProbeDailyScanTime').value = config.StrmProbeDailyScanTime || '';
                         document.querySelector('#StrmProbeCacheTtlDays').value = config.StrmProbeCacheTtlDays != null ? config.StrmProbeCacheTtlDays : 90;
                         document.querySelector('#EnableStrmDirectRedirect').checked = config.EnableStrmDirectRedirect === true;
+                        document.querySelector('#EnableStrmProxySource').checked = config.EnableStrmProxySource === true;
                         document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked = config.EnableSkipOnlineMetadataOnPlaybackInfo === true;
                         document.querySelector('#EnableVirtualSeasonOrphanFix').checked = config.EnableVirtualSeasonOrphanFix !== false;
                         document.querySelector('#EnableSplashscreenLibraryFilter').checked = config.EnableSplashscreenLibraryFilter === true;
@@ -384,6 +393,7 @@
                             config.StrmProbeCacheTtlDays = 90;
                         }
                         config.EnableStrmDirectRedirect = document.querySelector('#EnableStrmDirectRedirect').checked;
+                        config.EnableStrmProxySource = document.querySelector('#EnableStrmProxySource').checked;
                         config.EnableSkipOnlineMetadataOnPlaybackInfo = document.querySelector('#EnableSkipOnlineMetadataOnPlaybackInfo').checked;
                         config.EnableVirtualSeasonOrphanFix = document.querySelector('#EnableVirtualSeasonOrphanFix').checked;
                         config.EnableSplashscreenLibraryFilter = document.querySelector('#EnableSplashscreenLibraryFilter').checked;
