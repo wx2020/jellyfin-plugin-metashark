@@ -925,9 +925,8 @@ namespace Jellyfin.Plugin.MetaShark.Providers
 
         protected string GetProxyImageUrl(string url)
         {
-            var baseUrl = this.GetBaseUrl();
-            var encodedUrl = HttpUtility.UrlEncode(url);
-            return $"{baseUrl}/plugin/metashark/proxy/image/?url={encodedUrl}";
+            // 仅豆瓣图床走代理，其它来源（如 MoviePilot 返回的 TMDB 图片）直出原地址
+            return ImageProxyUrlPolicy.Build(this.GetBaseUrl(), url);
         }
 
         protected string GetLocalProxyImageUrl(string url)
@@ -938,8 +937,7 @@ namespace Jellyfin.Plugin.MetaShark.Providers
                 baseUrl = config.DoubanImageProxyBaseUrl.TrimEnd('/');
             }
 
-            var encodedUrl = HttpUtility.UrlEncode(url);
-            return $"{baseUrl}/plugin/metashark/proxy/image/?url={encodedUrl}";
+            return ImageProxyUrlPolicy.Build(baseUrl, url);
         }
 
         private string GetBaseUrl()
